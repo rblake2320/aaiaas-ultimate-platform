@@ -29,7 +29,7 @@ echo "1. Testing Python Syntax..."
 echo "-------------------------------------------"
 
 # Test AI API Python files
-cd /home/ubuntu/aaiaas/apps/api-ai
+cd "$(dirname "$0")/apps/api-ai"
 
 python3.11 -m py_compile main.py 2>/dev/null
 test_result $? "main.py syntax"
@@ -50,7 +50,7 @@ echo ""
 echo "2. Testing TypeScript Syntax..."
 echo "-------------------------------------------"
 
-cd /home/ubuntu/aaiaas/apps/api-control
+cd "$(dirname "$0")/apps/api-control"
 
 # Check if key files exist
 [ -f "src/index.ts" ]
@@ -65,14 +65,14 @@ test_result $? "API key service exists"
 [ -f "src/services/workflowService.ts" ]
 test_result $? "Workflow service exists"
 
-[ -f "src/services/ocr_service.py" ] && cd /home/ubuntu/aaiaas/apps/api-ai
+[ -f "src/services/ocr_service.py" ] && cd "$(dirname "$0")/apps/api-ai"
 test_result $? "OCR service exists"
 
 echo ""
 echo "3. Testing Next.js Frontend..."
 echo "-------------------------------------------"
 
-cd /home/ubuntu/aaiaas/apps/web
+cd "$(dirname "$0")/apps/web"
 
 [ -f "src/app/page.tsx" ]
 test_result $? "Homepage exists"
@@ -90,7 +90,7 @@ echo ""
 echo "4. Testing Configuration Files..."
 echo "-------------------------------------------"
 
-cd /home/ubuntu/aaiaas
+cd "$(dirname "$0")"
 
 [ -f "package.json" ]
 test_result $? "Root package.json exists"
@@ -130,7 +130,7 @@ echo ""
 echo "6. Testing Database Migrations..."
 echo "-------------------------------------------"
 
-cd /home/ubuntu/aaiaas/apps/api-control
+cd "$(dirname "$0")/apps/api-control"
 
 [ -f "migrations/20240101000001_initial_schema.js" ]
 test_result $? "Initial migration exists"
@@ -142,7 +142,7 @@ echo ""
 echo "7. Testing Git Repository..."
 echo "-------------------------------------------"
 
-cd /home/ubuntu/aaiaas
+cd "$(dirname "$0")"
 
 [ -d ".git" ]
 test_result $? "Git repository initialized"
@@ -161,7 +161,7 @@ echo ""
 echo "8. Testing Package Dependencies..."
 echo "-------------------------------------------"
 
-cd /home/ubuntu/aaiaas/apps/api-ai
+cd "$(dirname "$0")/apps/api-ai"
 
 grep -q "transformers" requirements.txt
 test_result $? "DeepSeek-OCR dependencies listed"
@@ -169,7 +169,7 @@ test_result $? "DeepSeek-OCR dependencies listed"
 grep -q "fastapi" requirements.txt
 test_result $? "FastAPI dependency listed"
 
-cd /home/ubuntu/aaiaas/apps/api-control
+cd "$(dirname "$0")/apps/api-control"
 
 grep -q "express" package.json
 test_result $? "Express dependency listed"
@@ -181,7 +181,7 @@ echo ""
 echo "9. Testing API Endpoints..."
 echo "-------------------------------------------"
 
-cd /home/ubuntu/aaiaas/apps/api-ai
+cd "$(dirname "$0")/apps/api-ai"
 
 # Check if OCR endpoints are defined
 grep -q "/api/v1/ocr" main.py

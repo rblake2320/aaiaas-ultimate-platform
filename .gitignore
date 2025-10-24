@@ -56,3 +56,8 @@ Thumbs.db
 # Uploads
 uploads/
 temp/
+
+
+# TypeScript build artifacts
+*.tsbuildinfo
+
