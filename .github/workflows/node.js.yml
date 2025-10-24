@@ -5,7 +5,7 @@ name: Node.js CI
 
 on:
   push:
-      branches: [ master, main, develop ]
+      branches: [master, main, develop]
           paths:
                 - 'apps/**'
                       - 'packages/**'
@@ -13,7 +13,7 @@ on:
                                   - 'turbo.json'
                                         - '.github/workflows/node.js.yml'
                                           pull_request:
-                                              branches: [ master, main, develop ]
+                                              branches: [master, main, develop]
                                                   paths:
                                                         - 'apps/**'
                                                               - 'packages/**'
@@ -29,27 +29,27 @@ on:
                                                                                                   node-version: [18.x, 20.x]
 
                                                                                                       steps:
-                                                                                                          - uses: actions/checkout@v4
-                                                                                                                with:
-                                                                                                                        fetch-depth: 0
-                                                                                                                        
-                                                                                                                            - name: Use Node.js ${{ matrix.node-version }}
-                                                                                                                                  uses: actions/setup-node@v4
-                                                                                                                                        with:
-                                                                                                                                                node-version: ${{ matrix.node-version }}
-                                                                                                                                                        cache: 'npm'
-                                                                                                                                                        
-                                                                                                                                                            - name: Install dependencies
-                                                                                                                                                                  run: npm ci
-                                                                                                                                                                  
-                                                                                                                                                                      - name: Lint code
-                                                                                                                                                                            run: npm run lint --if-present
-                                                                                                                                                                            
-                                                                                                                                                                                - name: Check types
-                                                                                                                                                                                      run: npm run type-check --if-present
+                                                                                                            - uses: actions/checkout@v4
+                                                                                                                    with:
+                                                                                                                              fetch-depth: 0
+                                                                                                                              
+                                                                                                                                    - name: Use Node.js ${{ matrix.node-version }}
+                                                                                                                                            uses: actions/setup-node@v4
+                                                                                                                                                    with:
+                                                                                                                                                              node-version: ${{ matrix.node-version }}
+                                                                                                                                                                        cache: 'npm'
+                                                                                                                                                                        
+                                                                                                                                                                              - name: Install dependencies
+                                                                                                                                                                                      run: npm ci
                                                                                                                                                                                       
-                                                                                                                                                                                          - name: Build with Turbo
-                                                                                                                                                                                                run: npm run build
-                                                                                                                                                                                                
-                                                                                                                                                                                                    - name: Run tests
-                                                                                                                                                                                                          run: npm test
+                                                                                                                                                                                            - name: Lint code
+                                                                                                                                                                                                    run: npm run lint --if-present
+                                                                                                                                                                                                    
+                                                                                                                                                                                                          - name: Check types
+                                                                                                                                                                                                                  run: npm run type-check --if-present
+                                                                                                                                                                                                                  
+                                                                                                                                                                                                                        - name: Build with Turbo
+                                                                                                                                                                                                                                run: npm run build
+                                                                                                                                                                                                                                
+                                                                                                                                                                                                                                      - name: Run tests
+                                                                                                                                                                                                                                              run: npm test
