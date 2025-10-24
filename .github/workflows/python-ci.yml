@@ -5,62 +5,62 @@ name: Python CI
 
 on:
   push:
-      branches: [master, main, develop]
-          paths:
-                - 'apps/api-ai/**'
-                      - 'requirements*.txt'
-                            - '.github/workflows/python-ci.yml'
-                              pull_request:
-                                  branches: [master, main, develop]
-                                      paths:
-                                            - 'apps/api-ai/**'
-                                                  - 'requirements*.txt'
+    branches: [master, main, develop]
+    paths:
+      - 'apps/api-ai/**'
+      - 'requirements*.txt'
+      - '.github/workflows/python-ci.yml'
+  pull_request:
+    branches: [master, main, develop]
+    paths:
+      - 'apps/api-ai/**'
+      - 'requirements*.txt'
 
-                                                  jobs:
-                                                    test:
-                                                        runs-on: ubuntu-latest
+jobs:
+  test:
+    runs-on: ubuntu-latest
 
-                                                            strategy:
-                                                                  matrix:
-                                                                          python-version: ['3.11', '3.12']
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.12']
 
-                                                                              steps:
-                                                                                    - uses: actions/checkout@v4
-                                                                                            with:
-                                                                                                      fetch-depth: 0
-                                                                                                      
-                                                                                                            - name: Set up Python ${{ matrix.python-version }}
-                                                                                                                    uses: actions/setup-python@v4
-                                                                                                                            with:
-                                                                                                                                      python-version: ${{ matrix.python-version }}
-                                                                                                                                      
-                                                                                                                                            - name: Cache pip packages
-                                                                                                                                                    uses: actions/cache@v3
-                                                                                                                                                            with:
-                                                                                                                                                                      path: ~/.cache/pip
-                                                                                                                                                                                key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
-                                                                                                                                                                                          restore-keys: |
-                                                                                                                                                                                                      ${{ runner.os }}-pip-
-                                                                                                                                                                                                      
-                                                                                                                                                                                                            - name: Install dependencies
-                                                                                                                                                                                                                    run: |
-                                                                                                                                                                                                                              python -m pip install --upgrade pip
-                                                                                                                                                                                                                                        pip install -r requirements.txt
-                                                                                                                                                                                                                                                  pip install pytest pytest-cov flake8 black mypy
-                                                                                                                                                                                                                                                          continue-on-error: true
-                                                                                                                                                                                                                                                          
-                                                                                                                                                                                                                                                                - name: Lint with flake8
-                                                                                                                                                                                                                                                                        run: flake8 apps/api-ai --exit-zero --max-complexity=10
-                                                                                                                                                                                                                                                                                continue-on-error: true
-                                                                                                                                                                                                                                                                                
-                                                                                                                                                                                                                                                                                      - name: Check code style with black
-                                                                                                                                                                                                                                                                                              run: black --check apps/api-ai --diff
-                                                                                                                                                                                                                                                                                                      continue-on-error: true
-                                                                                                                                                                                                                                                                                                      
-                                                                                                                                                                                                                                                                                                            - name: Type check with mypy
-                                                                                                                                                                                                                                                                                                                    run: mypy apps/api-ai --ignore-missing-imports
-                                                                                                                                                                                                                                                                                                                            continue-on-error: true
-                                                                                                                                                                                                                                                                                                                            
-                                                                                                                                                                                                                                                                                                                                  - name: Run tests with pytest
-                                                                                                                                                                                                                                                                                                                                          run: pytest apps/api-ai/tests --cov=apps/api-ai --cov-report=xml
-                                                                                                                                                                                                                                                                                                                                                  continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Cache pip packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov flake8 black mypy
+        continue-on-error: true
+
+      - name: Lint with flake8
+        run: flake8 apps/api-ai --exit-zero --max-complexity=10
+        continue-on-error: true
+
+      - name: Check code style with black
+        run: black --check apps/api-ai --diff
+        continue-on-error: true
+
+      - name: Type check with mypy
+        run: mypy apps/api-ai --ignore-missing-imports
+        continue-on-error: true
+
+      - name: Run tests with pytest
+        run: pytest apps/api-ai/tests --cov=apps/api-ai --cov-report=xml
+        continue-on-error: true
