@@ -4,6 +4,7 @@ Enterprise-grade AI-as-a-Service platform with comprehensive automation, multi-t
 
 ## Features
 
+- 📄 **OCR & Document Processing**: DeepSeek-OCR for document scanning, text extraction, and visual understanding
 - 🤖 **AI/ML Services**: LLM orchestration, RAG, embeddings, and agent framework
 - 🔄 **Workflow Automation**: Visual workflow builder and execution engine
 - 👥 **Multi-Tenancy**: Organization-based isolation with RBAC

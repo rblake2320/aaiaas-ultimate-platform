@@ -493,3 +493,225 @@ async def batch_process(
         failed=failed
     )
 
+
+
+
+# OCR Service with DeepSeek-OCR
+from services.ocr_service import ocr_service
+from fastapi import File, UploadFile
+
+class OCRRequest(BaseModel):
+    image: str  # base64 encoded image
+    mode: str = Field(default="free_ocr", pattern="^(free_ocr|document_to_markdown|grounded_ocr|parse_figure|describe_image)$")
+    base_size: int = Field(default=1024, ge=512, le=1280)
+    image_size: int = Field(default=640, ge=512, le=1280)
+    crop_mode: bool = True
+
+class OCRResponse(BaseModel):
+    result: Dict[str, Any]
+    mode: str
+    status: str
+
+@app.post("/api/v1/ocr", response_model=OCRResponse)
+async def ocr_image(
+    request: OCRRequest,
+    api_key: str = Depends(verify_api_key)
+):
+    """
+    Perform OCR on an image using DeepSeek-OCR
+    
+    Supported modes:
+    - free_ocr: Extract text without layout
+    - document_to_markdown: Convert document to markdown
+    - grounded_ocr: Extract text with layout structure
+    - parse_figure: Parse charts and figures
+    - describe_image: Generate detailed image description
+    """
+    try:
+        if request.mode == "free_ocr":
+            result = await ocr_service.free_ocr(
+                request.image,
+                request.base_size,
+                request.image_size
+            )
+        elif request.mode == "document_to_markdown":
+            result = await ocr_service.document_to_markdown(
+                request.image,
+                request.base_size,
+                request.image_size,
+                request.crop_mode
+            )
+        elif request.mode == "grounded_ocr":
+            result = await ocr_service.grounded_ocr(
+                request.image,
+                request.base_size,
+                request.image_size
+            )
+        elif request.mode == "parse_figure":
+            result = await ocr_service.parse_figure(
+                request.image,
+                request.base_size
+            )
+        elif request.mode == "describe_image":
+            result = await ocr_service.describe_image(
+                request.image,
+                request.base_size
+            )
+        else:
+            raise HTTPException(status_code=400, detail=f"Unknown mode: {request.mode}")
+        
+        return OCRResponse(
+            result=result,
+            mode=request.mode,
+            status="success"
+        )
+    except Exception as e:
+        logger.error(f"OCR processing error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/ocr/upload")
+async def ocr_upload(
+    file: UploadFile = File(...),
+    mode: str = "free_ocr",
+    base_size: int = 1024,
+    api_key: str = Depends(verify_api_key)
+):
+    """
+    Upload an image file for OCR processing
+    """
+    try:
+        # Read uploaded file
+        contents = await file.read()
+        
+        # Process based on mode
+        if mode == "free_ocr":
+            result = await ocr_service.free_ocr(contents, base_size)
+        elif mode == "document_to_markdown":
+            result = await ocr_service.document_to_markdown(contents, base_size)
+        elif mode == "grounded_ocr":
+            result = await ocr_service.grounded_ocr(contents, base_size)
+        elif mode == "parse_figure":
+            result = await ocr_service.parse_figure(contents, base_size)
+        elif mode == "describe_image":
+            result = await ocr_service.describe_image(contents, base_size)
+        else:
+            raise HTTPException(status_code=400, detail=f"Unknown mode: {mode}")
+        
+        return {
+            "filename": file.filename,
+            "result": result,
+            "mode": mode,
+            "status": "success"
+        }
+    except Exception as e:
+        logger.error(f"OCR upload error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+class BatchOCRRequest(BaseModel):
+    images: List[str]  # List of base64 encoded images
+    mode: str = "free_ocr"
+    base_size: int = 1024
+
+@app.post("/api/v1/ocr/batch")
+async def batch_ocr(
+    request: BatchOCRRequest,
+    api_key: str = Depends(verify_api_key)
+):
+    """
+    Process multiple images in batch
+    """
+    try:
+        results = await ocr_service.batch_ocr(
+            request.images,
+            request.mode,
+            request.base_size
+        )
+        
+        successful = sum(1 for r in results if r.get("status") == "success")
+        failed = len(results) - successful
+        
+        return {
+            "results": results,
+            "total": len(results),
+            "successful": successful,
+            "failed": failed,
+            "mode": request.mode
+        }
+    except Exception as e:
+        logger.error(f"Batch OCR error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/ocr/pdf")
+async def pdf_to_markdown(
+    file: UploadFile = File(...),
+    api_key: str = Depends(verify_api_key)
+):
+    """
+    Convert PDF to markdown
+    """
+    try:
+        # Save uploaded PDF temporarily
+        import tempfile
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp:
+            contents = await file.read()
+            tmp.write(contents)
+            tmp_path = tmp.name
+        
+        # Process PDF
+        result = await ocr_service.pdf_to_markdown(tmp_path)
+        
+        # Clean up
+        import os
+        os.unlink(tmp_path)
+        
+        return {
+            "filename": file.filename,
+            "result": result,
+            "status": "success"
+        }
+    except Exception as e:
+        logger.error(f"PDF OCR error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# OCR capabilities info
+@app.get("/api/v1/ocr/capabilities")
+async def ocr_capabilities():
+    """
+    Get OCR service capabilities and supported modes
+    """
+    return {
+        "service": "DeepSeek-OCR",
+        "version": "1.0",
+        "modes": {
+            "free_ocr": {
+                "description": "Extract text without layout information",
+                "use_case": "Simple text extraction"
+            },
+            "document_to_markdown": {
+                "description": "Convert documents to markdown format",
+                "use_case": "Document digitization with structure"
+            },
+            "grounded_ocr": {
+                "description": "Extract text with layout and bounding boxes",
+                "use_case": "Structured document analysis"
+            },
+            "parse_figure": {
+                "description": "Parse charts, graphs, and diagrams",
+                "use_case": "Data extraction from visualizations"
+            },
+            "describe_image": {
+                "description": "Generate detailed image descriptions",
+                "use_case": "Image understanding and captioning"
+            }
+        },
+        "supported_resolutions": {
+            "tiny": "512x512 (64 vision tokens)",
+            "small": "640x640 (100 vision tokens)",
+            "base": "1024x1024 (256 vision tokens)",
+            "large": "1280x1280 (400 vision tokens)"
+        },
+        "supported_formats": ["JPEG", "PNG", "PDF", "WEBP"],
+        "max_file_size": "10MB",
+        "batch_limit": 100
+    }
+
