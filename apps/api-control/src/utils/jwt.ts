@@ -1,4 +1,4 @@
-import jwt from 'jsonwebtoken';
+import jwt, { SignOptions } from 'jsonwebtoken';
 import { env } from '../config/env';
 import crypto from 'crypto';
 
@@ -11,19 +11,19 @@ export interface TokenPayload {
 
 export function generateAccessToken(payload: TokenPayload): string {
   return jwt.sign(payload, env.JWT_SECRET, {
-    expiresIn: env.JWT_EXPIRES_IN,
+    expiresIn: env.JWT_EXPIRES_IN as any,
   });
 }
 
 export function generateRefreshToken(payload: TokenPayload): string {
   return jwt.sign(payload, env.REFRESH_TOKEN_SECRET, {
-    expiresIn: env.REFRESH_TOKEN_EXPIRES_IN,
+    expiresIn: env.REFRESH_TOKEN_EXPIRES_IN as any,
   });
 }
 
 export function verifyAccessToken(token: string): TokenPayload {
   try {
-    return jwt.verify(token, env.JWT_SECRET) as TokenPayload;
+    return jwt.verify(token, env.JWT_SECRET as string) as TokenPayload;
   } catch (error) {
     throw new Error('Invalid or expired access token');
   }
@@ -31,7 +31,7 @@ export function verifyAccessToken(token: string): TokenPayload {
 
 export function verifyRefreshToken(token: string): TokenPayload {
   try {
-    return jwt.verify(token, env.REFRESH_TOKEN_SECRET) as TokenPayload;
+    return jwt.verify(token, env.REFRESH_TOKEN_SECRET as string) as TokenPayload;
   } catch (error) {
     throw new Error('Invalid or expired refresh token');
   }
