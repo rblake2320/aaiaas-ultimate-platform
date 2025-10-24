@@ -45,6 +45,9 @@ Thumbs.db
 # Turbo
 .turbo/
 
+# TypeScript
+*.tsbuildinfo
+
 # Docker
 *.log
 
