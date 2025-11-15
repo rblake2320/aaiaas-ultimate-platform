@@ -1,6 +1,7 @@
 import { db } from '../config/database';
 import { logger } from '../utils/logger';
 import axios from 'axios';
+import { Parser } from 'expr-eval';
 
 export interface WorkflowNode {
   id: string;
@@ -326,12 +327,18 @@ export class WorkflowEngine {
   }
 
   private evaluateCondition(condition: string, variables: Record<string, any>): boolean {
-    // Simple condition evaluation
-    // In production, use a safe expression evaluator
+    // Safe condition evaluation using expr-eval parser
+    // Prevents arbitrary code execution vulnerabilities
     try {
-      const interpolated = this.interpolateString(condition, variables);
-      return eval(interpolated);
-    } catch {
+      const parser = new Parser();
+      const expr = parser.parse(condition);
+      const result = expr.evaluate(variables);
+      return Boolean(result);
+    } catch (error) {
+      logger.warn('Condition evaluation failed', {
+        condition,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
       return false;
     }
   }

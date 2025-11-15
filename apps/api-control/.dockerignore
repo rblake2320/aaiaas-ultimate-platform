@@ -1,0 +1,61 @@
+# Dependencies
+node_modules
+npm-debug.log
+yarn-error.log
+package-lock.json
+yarn.lock
+
+# Development files
+.env
+.env.local
+.env.*.local
+*.env
+
+# TypeScript
+*.ts
+!dist/**/*.ts
+tsconfig.json
+.tsbuildinfo
+
+# Testing
+tests
+*.test.ts
+*.test.js
+*.spec.ts
+*.spec.js
+coverage
+.nyc_output
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Git
+.git
+.gitignore
+.gitattributes
+.github
+
+# Documentation
+README.md
+*.md
+!dist/**/*.md
+docs
+
+# Build artifacts (keep dist for production)
+src
+!dist
+
+# Logs
+logs
+*.log
+
+# Misc
+.npmrc
+.prettierrc
+.eslintrc*
+jest.config.js

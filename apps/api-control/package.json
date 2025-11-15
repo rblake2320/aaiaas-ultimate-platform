@@ -30,7 +30,8 @@
     "axios": "^1.6.5",
     "winston": "^3.11.0",
     "dotenv": "^16.3.1",
-    "uuid": "^9.0.1"
+    "uuid": "^9.0.1",
+    "expr-eval": "^2.0.2"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",

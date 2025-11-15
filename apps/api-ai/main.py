@@ -6,30 +6,58 @@ from typing import Optional, List, Dict, Any
 import os
 import logging
 from datetime import datetime
+from contextlib import asynccontextmanager
+
+# Import config, database, and auth
+from config import settings
+from database import db
+from auth import verify_api_key
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=getattr(logging, settings.log_level.upper()),
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
-# Initialize FastAPI app
+
+# Lifespan context manager for startup/shutdown
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage application lifecycle"""
+    # Startup
+    logger.info("Starting AI Services API...")
+    try:
+        await db.connect()
+        logger.info("Database connected successfully")
+    except Exception as e:
+        logger.error(f"Failed to connect to database: {str(e)}")
+        raise
+
+    yield
+
+    # Shutdown
+    logger.info("Shutting down AI Services API...")
+    await db.disconnect()
+
+
+# Initialize FastAPI app with lifespan
 app = FastAPI(
     title="aaIaaS AI Services API",
     description="AI and ML services for automation platform",
     version="0.1.0",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
-# CORS middleware
+# CORS middleware - restrict to configured origins only
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.getenv("CORS_ORIGIN", "http://localhost:3000").split(","),
+    allow_origins=settings.allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept"],
 )
 
 # Models
@@ -78,18 +106,7 @@ class EmbeddingResponse(BaseModel):
     model: str
     usage: Dict[str, int]
 
-# Dependency for API key validation
-async def verify_api_key(authorization: Optional[str] = Header(None)):
-    if not authorization:
-        raise HTTPException(status_code=401, detail="No authorization header")
-    
-    parts = authorization.split(" ")
-    if len(parts) != 2 or parts[0] not in ["Bearer", "ApiKey"]:
-        raise HTTPException(status_code=401, detail="Invalid authorization format")
-    
-    # In production, validate against database
-    # For now, just check if key exists
-    return parts[1]
+# Note: verify_api_key is now imported from auth.py and validates against database
 
 # Routes
 @app.get("/health", response_model=HealthResponse)
@@ -104,7 +121,7 @@ async def health_check():
 @app.post("/api/v1/chat", response_model=ChatResponse)
 async def chat_completion(
     request: ChatRequest,
-    api_key: str = Depends(verify_api_key)
+    org_context: dict = Depends(verify_api_key)
 ):
     """
     Generate chat completion using LLM

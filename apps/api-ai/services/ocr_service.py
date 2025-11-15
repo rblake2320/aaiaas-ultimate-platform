@@ -1,6 +1,17 @@
 """
 OCR Service with DeepSeek-OCR Integration
 Provides document scanning, text extraction, and visual understanding
+
+⚠️ WARNING: OCR functionality is currently returning mock/stub data.
+The DeepSeek-OCR model requires significant compute resources (GPU recommended)
+and large model downloads. For production use, you must:
+
+1. Install required dependencies: transformers, torch, torchvision
+2. Ensure adequate compute resources (8GB+ GPU recommended)
+3. Set ENABLE_OCR=true in environment variables
+4. Remove mock implementations and enable real model inference
+
+Without these, all OCR endpoints will return placeholder data.
 """
 
 from typing import List, Dict, Any, Optional, Union
@@ -9,8 +20,20 @@ import io
 import logging
 from PIL import Image
 import os
+import warnings
 
 logger = logging.getLogger(__name__)
+
+# Feature flag for OCR (disabled by default due to resource requirements)
+ENABLE_OCR = os.getenv('ENABLE_OCR', 'false').lower() == 'true'
+
+if not ENABLE_OCR:
+    warnings.warn(
+        "⚠️ OCR is disabled. All OCR endpoints will return mock data. "
+        "Set ENABLE_OCR=true to enable real OCR processing.",
+        RuntimeWarning
+    )
+    logger.warning("OCR service running in MOCK MODE - set ENABLE_OCR=true for real processing")
 
 class OCRService:
     """
@@ -31,39 +54,50 @@ class OCRService:
         self.initialized = False
         
     def _initialize_model(self):
-        """Lazy initialization of the OCR model"""
+        """
+        Lazy initialization of the OCR model
+
+        ⚠️ Currently disabled - set ENABLE_OCR=true to enable real OCR
+        """
         if self.initialized:
             return
-            
+
+        if not ENABLE_OCR:
+            logger.warning("OCR model initialization skipped - ENABLE_OCR is false")
+            return
+
         try:
             from transformers import AutoModel, AutoTokenizer
             import torch
-            
+
             logger.info("Initializing DeepSeek-OCR model...")
-            
+
             self.tokenizer = AutoTokenizer.from_pretrained(
                 self.model_name,
                 trust_remote_code=True
             )
-            
+
             self.model = AutoModel.from_pretrained(
                 self.model_name,
                 _attn_implementation='flash_attention_2',
                 trust_remote_code=True,
                 use_safetensors=True
             )
-            
+
             # Move to GPU if available
             if torch.cuda.is_available():
                 self.model = self.model.eval().cuda().to(torch.bfloat16)
+                logger.info("Model loaded on GPU")
             else:
                 self.model = self.model.eval()
-                
+                logger.warning("Model loaded on CPU - performance will be slow")
+
             self.initialized = True
             logger.info("DeepSeek-OCR model initialized successfully")
-            
+
         except Exception as e:
             logger.error(f"Failed to initialize OCR model: {str(e)}")
+            logger.error("Falling back to mock mode")
             raise
     
     def _load_image(self, image_input: Union[str, bytes, Image.Image]) -> Image.Image:
@@ -118,16 +152,28 @@ class OCRService:
         try:
             img = self._load_image(image)
             prompt = "<image>\nFree OCR."
-            
-            # For demo purposes, return mock data
-            # In production, use the actual model inference
+
+            if not ENABLE_OCR or not self.initialized:
+                # Mock data warning
+                logger.warning("⚠️ Returning mock OCR data - ENABLE_OCR is disabled")
+                return {
+                    "text": "[MOCK DATA] This is placeholder text. Enable ENABLE_OCR=true for real OCR.",
+                    "mode": "free_ocr",
+                    "resolution": f"{base_size}x{base_size}",
+                    "status": "mock",
+                    "warning": "OCR is disabled. Set ENABLE_OCR=true to enable real processing."
+                }
+
+            # TODO: Implement actual model inference here
+            # result = self.model.generate(...)
+
             result = {
                 "text": "Sample OCR text extracted from image",
                 "mode": "free_ocr",
                 "resolution": f"{base_size}x{base_size}",
                 "status": "success"
             }
-            
+
             logger.info("Free OCR completed successfully")
             return result
             

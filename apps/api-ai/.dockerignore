@@ -1,0 +1,85 @@
+# Python cache
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info
+dist-info
+*.egg
+.eggs
+*.whl
+
+# Virtual environments
+venv
+env
+ENV
+.venv
+
+# Development files
+.env
+.env.local
+.env.*.local
+*.env
+.env.example
+
+# Testing
+tests
+test_*.py
+*_test.py
+*.test.py
+.pytest_cache
+.coverage
+htmlcov
+.tox
+.nox
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.DS_Store
+.python-version
+
+# Git
+.git
+.gitignore
+.gitattributes
+.github
+
+# Documentation
+README.md
+*.md
+docs
+*.txt.bak
+
+# Jupyter
+.ipynb_checkpoints
+*.ipynb
+
+# MyPy
+.mypy_cache
+.dmypy.json
+dmypy.json
+
+# Logs
+logs
+*.log
+
+# Large model files (download at runtime if needed)
+models
+*.pt
+*.pth
+*.bin
+*.onnx
+*.h5
+
+# Misc
+.flake8
+.pylintrc
+pyproject.toml
+setup.py
+setup.cfg
+Makefile

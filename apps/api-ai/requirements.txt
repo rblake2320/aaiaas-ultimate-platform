@@ -1,24 +1,42 @@
-fastapi==0.109.0
-uvicorn[standard]==0.27.0
-pydantic==2.5.3
-pydantic-settings==2.1.0
-python-dotenv==1.0.0
-python-multipart==0.0.6
+# Core FastAPI and ASGI
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+pydantic==2.10.3
+pydantic-settings==2.6.1
+
+# Utilities
+python-dotenv==1.0.1
+python-multipart==0.0.18
+python-dateutil==2.9.0.post0
+
+# Authentication
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
-asyncpg==0.29.0
-redis==5.0.1
-openai==1.7.2
-langchain==0.1.0
-langchain-openai==0.0.2
-langchain-community==0.0.10
-tiktoken==0.5.2
-numpy==1.26.3
-psycopg2-binary==2.9.9
-pgvector==0.2.4
-httpx==0.26.0
-aiofiles==23.2.1
-python-json-logger==2.0.7
+
+# Database
+asyncpg==0.30.0
+psycopg2-binary==2.9.10
+pgvector==0.3.6
+
+# Caching
+redis==5.2.1
+
+# AI/ML - Core
+openai==1.58.1
+langchain==0.3.13
+langchain-openai==0.2.14
+langchain-community==0.3.13
+tiktoken==0.8.0
+
+# HTTP and I/O
+httpx==0.28.1
+aiofiles==24.1.0
+
+# Logging
+python-json-logger==3.2.1
+
+# Utilities
+numpy==2.2.1
 
 # DeepSeek-OCR dependencies
 transformers>=4.51.1
