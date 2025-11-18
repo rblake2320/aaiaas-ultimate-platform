@@ -1,5 +1,6 @@
 import { db } from '../config/database';
 import { logger } from '../utils/logger';
+import { safeJsonParse } from '../utils/safeJson';
 import crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -93,7 +94,7 @@ export class ApiKeyService {
       id: key.id,
       organizationId: key.organization_id,
       userId: key.user_id,
-      scopes: JSON.parse(key.scopes),
+      scopes: safeJsonParse(key.scopes, []),
       rateLimit: key.rate_limit,
       organization,
     };
@@ -111,7 +112,7 @@ export class ApiKeyService {
       id: key.id,
       name: key.name,
       keyPrefix: key.key_prefix,
-      scopes: JSON.parse(key.scopes),
+      scopes: safeJsonParse(key.scopes, []),
       rateLimit: key.rate_limit,
       revoked: key.revoked,
       expiresAt: key.expires_at,
@@ -136,7 +137,7 @@ export class ApiKeyService {
       id: key.id,
       name: key.name,
       keyPrefix: key.key_prefix,
-      scopes: JSON.parse(key.scopes),
+      scopes: safeJsonParse(key.scopes, []),
       rateLimit: key.rate_limit,
       revoked: key.revoked,
       expiresAt: key.expires_at,

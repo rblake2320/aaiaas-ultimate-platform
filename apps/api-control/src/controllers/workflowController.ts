@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { db } from '../config/database';
 import { workflowEngine, WorkflowDefinition } from '../services/workflowService';
 import { logger } from '../utils/logger';
+import { safeJsonParse } from '../utils/safeJson';
 import { v4 as uuidv4 } from 'uuid';
 
 const workflowSchema = z.object({
@@ -86,11 +87,13 @@ export class WorkflowController {
       return res.status(404).json({ error: 'Workflow not found' });
     }
 
+    const definition = safeJsonParse(workflow.definition, { nodes: [], variables: {} });
+
     res.json({
       id: workflow.id,
       name: workflow.name,
       description: workflow.description,
-      definition: JSON.parse(workflow.definition),
+      definition,
       status: workflow.status,
       createdAt: workflow.created_at,
       updatedAt: workflow.updated_at,
@@ -117,10 +120,10 @@ export class WorkflowController {
     if (input.name) updates.name = input.name;
     if (input.description !== undefined) updates.description = input.description;
     if (input.nodes || input.variables) {
-      const currentDef = JSON.parse(workflow.definition);
+      const currentDef = safeJsonParse(workflow.definition, { nodes: [], variables: {} }) || { nodes: [], variables: {} };
       updates.definition = JSON.stringify({
-        nodes: input.nodes || currentDef.nodes,
-        variables: input.variables || currentDef.variables,
+        nodes: input.nodes || currentDef.nodes || [],
+        variables: input.variables || currentDef.variables || {},
       });
     }
 
@@ -176,11 +179,13 @@ export class WorkflowController {
       return res.status(400).json({ error: 'Workflow is not active' });
     }
 
+    const parsedDef = safeJsonParse(workflow.definition, { nodes: [], variables: {} }) || { nodes: [], variables: {} };
     const definition: WorkflowDefinition = {
       id: workflow.id,
       name: workflow.name,
       description: workflow.description,
-      ...JSON.parse(workflow.definition),
+      nodes: parsedDef.nodes || [],
+      variables: parsedDef.variables || {},
     };
 
     const executionId = uuidv4();
@@ -226,8 +231,8 @@ export class WorkflowController {
       id: execution.id,
       workflowId: execution.workflow_id,
       status: execution.status,
-      input: execution.input ? JSON.parse(execution.input) : null,
-      output: execution.output ? JSON.parse(execution.output) : null,
+      input: safeJsonParse(execution.input, null),
+      output: safeJsonParse(execution.output, null),
       error: execution.error,
       startedAt: execution.started_at,
       completedAt: execution.completed_at,

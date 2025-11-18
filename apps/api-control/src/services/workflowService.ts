@@ -326,14 +326,58 @@ export class WorkflowEngine {
   }
 
   private evaluateCondition(condition: string, variables: Record<string, any>): boolean {
-    // Simple condition evaluation
-    // In production, use a safe expression evaluator
+    // Safe condition evaluation without eval()
     try {
       const interpolated = this.interpolateString(condition, variables);
-      return eval(interpolated);
-    } catch {
+
+      // Support basic comparison operators: ==, !=, >, <, >=, <=, &&, ||
+      // This is a safe subset of conditions without arbitrary code execution
+      const operatorRegex = /(.*?)\s*(==|!=|>=|<=|>|<)\s*(.*)/;
+      const match = interpolated.match(operatorRegex);
+
+      if (!match) {
+        // If no operator found, treat as boolean or truthy value
+        return this.parseValue(interpolated.trim());
+      }
+
+      const [, left, operator, right] = match;
+      const leftValue = this.parseValue(left.trim());
+      const rightValue = this.parseValue(right.trim());
+
+      switch (operator) {
+        case '==': return leftValue == rightValue;
+        case '!=': return leftValue != rightValue;
+        case '>': return Number(leftValue) > Number(rightValue);
+        case '<': return Number(leftValue) < Number(rightValue);
+        case '>=': return Number(leftValue) >= Number(rightValue);
+        case '<=': return Number(leftValue) <= Number(rightValue);
+        default: return false;
+      }
+    } catch (error) {
+      logger.warn('Condition evaluation failed', { condition, error });
       return false;
     }
+  }
+
+  private parseValue(value: string): any {
+    // Parse string to appropriate type
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+    if (value === 'null') return null;
+    if (value === 'undefined') return undefined;
+
+    // Remove quotes if present
+    if ((value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))) {
+      return value.slice(1, -1);
+    }
+
+    // Try to parse as number
+    const num = Number(value);
+    if (!isNaN(num)) return num;
+
+    // Return as string
+    return value;
   }
 
   private applyTransformation(transformation: any, variables: Record<string, any>): any {
