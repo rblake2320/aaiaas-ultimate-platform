@@ -1,0 +1,12 @@
+{
+  "orgs": [],
+  "repos": [],
+  "limit": 200,
+  "cacheDir": ".command-center/repos",
+  "outFile": "command-center/scanner/out/report.json",
+  "concurrency": 4,
+  "sync": {
+    "strategy": "ff-only"
+  }
+}
+
