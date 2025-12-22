@@ -6,6 +6,7 @@ from typing import Optional, List, Dict, Any
 import os
 import logging
 from datetime import datetime
+from openai import AsyncOpenAI
 
 # Configure logging
 logging.basicConfig(
@@ -13,6 +14,10 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# Reuse a single async OpenAI client across requests.
+# Creating a new client per request adds overhead and the sync client would block the event loop.
+openai_client = AsyncOpenAI()
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -110,15 +115,11 @@ async def chat_completion(
     Generate chat completion using LLM
     """
     try:
-        from openai import OpenAI
-        
-        client = OpenAI()
-        
         # Convert messages to OpenAI format
         messages = [{"role": msg.role, "content": msg.content} for msg in request.messages]
         
         # Call OpenAI API
-        response = client.chat.completions.create(
+        response = await openai_client.chat.completions.create(
             model=request.model,
             messages=messages,
             temperature=request.temperature,
@@ -152,12 +153,8 @@ async def text_completion(
     Generate text completion
     """
     try:
-        from openai import OpenAI
-        
-        client = OpenAI()
-        
         # Use chat completion for text completion
-        response = client.chat.completions.create(
+        response = await openai_client.chat.completions.create(
             model=request.model,
             messages=[{"role": "user", "content": request.prompt}],
             temperature=request.temperature,
@@ -188,15 +185,11 @@ async def create_embeddings(
     Generate embeddings for text
     """
     try:
-        from openai import OpenAI
-        
-        client = OpenAI()
-        
         # Ensure input is a list
         inputs = [request.input] if isinstance(request.input, str) else request.input
         
         # Call OpenAI embeddings API
-        response = client.embeddings.create(
+        response = await openai_client.embeddings.create(
             model=request.model,
             input=inputs
         )
@@ -291,8 +284,12 @@ async def index_document(
         # Store globally (in production, use database)
         if not hasattr(app.state, 'knowledge_base'):
             app.state.knowledge_base = {}
+        if not hasattr(app.state, 'knowledge_base_flat'):
+            app.state.knowledge_base_flat = []
         
         app.state.knowledge_base[document_id] = indexed_docs
+        # Keep a flattened list for faster queries (avoid O(total_docs) rebuild every request).
+        app.state.knowledge_base_flat.extend(indexed_docs)
         
         return RAGIndexResponse(
             chunks=len(indexed_docs),
@@ -313,18 +310,13 @@ async def rag_query(
     """
     try:
         # Get knowledge base (in production, load from database)
-        if not hasattr(app.state, 'knowledge_base'):
+        if not hasattr(app.state, 'knowledge_base_flat') or not app.state.knowledge_base_flat:
             raise HTTPException(status_code=404, detail="No documents indexed")
-        
-        # Flatten all documents
-        all_docs = []
-        for doc_list in app.state.knowledge_base.values():
-            all_docs.extend(doc_list)
         
         # Perform RAG query
         result = await rag_service.rag_query(
             query=request.query,
-            knowledge_base=all_docs,
+            knowledge_base=app.state.knowledge_base_flat,
             top_k=request.top_k,
             system_prompt=request.system_prompt,
             temperature=request.temperature

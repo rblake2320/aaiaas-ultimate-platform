@@ -36,6 +36,12 @@ export interface AnalyticsMetrics {
 }
 
 export class AnalyticsService {
+  private toNumber(value: unknown): number {
+    if (value === null || value === undefined) return 0;
+    const n = typeof value === 'number' ? value : Number(value);
+    return Number.isFinite(n) ? n : 0;
+  }
+
   /**
    * Get comprehensive analytics dashboard data
    */
@@ -45,31 +51,36 @@ export class AnalyticsService {
     const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
 
-    // Get current month usage
-    const currentMonthRecords = await db('usage_records')
+    // Aggregate via SQL (avoid loading potentially huge usage_records into memory).
+    const currentTotals = await db('usage_records')
       .where({ organization_id: organizationId })
-      .whereBetween('recorded_at', [startOfMonth, now]);
+      .whereBetween('recorded_at', [startOfMonth, now])
+      .select('metric')
+      .sum({ total: 'value' })
+      .groupBy('metric');
 
-    const totalApiCalls = currentMonthRecords
-      .filter((r) => r.metric === 'api_calls')
-      .reduce((sum, r) => sum + r.value, 0);
+    const currentByMetric = new Map<string, number>();
+    for (const row of currentTotals as Array<{ metric: string; total: unknown }>) {
+      currentByMetric.set(row.metric, this.toNumber(row.total));
+    }
 
-    const totalTokens = currentMonthRecords
-      .filter((r) => r.metric === 'tokens_input' || r.metric === 'tokens_output')
-      .reduce((sum, r) => sum + r.value, 0);
+    const totalApiCalls = currentByMetric.get('api_calls') ?? 0;
+    const totalTokens = (currentByMetric.get('tokens_input') ?? 0) + (currentByMetric.get('tokens_output') ?? 0);
 
-    // Get last month for comparison
-    const lastMonthRecords = await db('usage_records')
+    const lastTotals = await db('usage_records')
       .where({ organization_id: organizationId })
-      .whereBetween('recorded_at', [startOfLastMonth, endOfLastMonth]);
+      .whereBetween('recorded_at', [startOfLastMonth, endOfLastMonth])
+      .select('metric')
+      .sum({ total: 'value' })
+      .groupBy('metric');
 
-    const lastMonthApiCalls = lastMonthRecords
-      .filter((r) => r.metric === 'api_calls')
-      .reduce((sum, r) => sum + r.value, 0);
+    const lastByMetric = new Map<string, number>();
+    for (const row of lastTotals as Array<{ metric: string; total: unknown }>) {
+      lastByMetric.set(row.metric, this.toNumber(row.total));
+    }
 
-    const lastMonthTokens = lastMonthRecords
-      .filter((r) => r.metric === 'tokens_input' || r.metric === 'tokens_output')
-      .reduce((sum, r) => sum + r.value, 0);
+    const lastMonthApiCalls = lastByMetric.get('api_calls') ?? 0;
+    const lastMonthTokens = (lastByMetric.get('tokens_input') ?? 0) + (lastByMetric.get('tokens_output') ?? 0);
 
     // Calculate trends
     const apiCallsTrend = lastMonthApiCalls > 0
@@ -92,28 +103,24 @@ export class AnalyticsService {
       .count('* as count')
       .first();
 
-    // Get top users by usage
-    const userUsage = await db('usage_records')
-      .where({ organization_id: organizationId })
-      .whereBetween('recorded_at', [startOfMonth, now])
-      .whereNotNull('user_id')
-      .select('user_id')
-      .sum('value as total')
-      .groupBy('user_id')
-      .orderBy('total', 'desc')
+    // Get top users by API calls without N+1 lookups (join users table).
+    const topUsersRows = await db('usage_records as ur')
+      .leftJoin('users as u', 'u.id', 'ur.user_id')
+      .where({ 'ur.organization_id': organizationId, 'ur.metric': 'api_calls' })
+      .whereBetween('ur.recorded_at', [startOfMonth, now])
+      .whereNotNull('ur.user_id')
+      .select('ur.user_id as userId', db.raw("COALESCE(u.name, 'Unknown') as userName"))
+      .sum({ apiCalls: 'ur.value' })
+      .groupBy('ur.user_id', 'u.name')
+      .orderByRaw('SUM(ur.value) DESC')
       .limit(5);
 
-    const topUsers = await Promise.all(
-      userUsage.map(async (u) => {
-        const user = await db('users').where({ id: u.user_id }).first();
-        return {
-          userId: u.user_id,
-          userName: user?.name || 'Unknown',
-          apiCalls: parseInt(u.total as string) || 0,
-          tokens: 0, // Would calculate separately in production
-        };
-      })
-    );
+    const topUsers = (topUsersRows as Array<{ userId: string; userName: string; apiCalls: unknown }>).map((r) => ({
+      userId: r.userId,
+      userName: r.userName,
+      apiCalls: this.toNumber(r.apiCalls),
+      tokens: 0, // Would calculate separately in production
+    }));
 
     return {
       overview: {
@@ -145,17 +152,20 @@ export class AnalyticsService {
     const now = new Date();
     const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
 
-    const recentRecords = await db('usage_records')
+    const recentTotals = await db('usage_records')
       .where({ organization_id: organizationId })
-      .whereBetween('recorded_at', [oneHourAgo, now]);
+      .whereBetween('recorded_at', [oneHourAgo, now])
+      .select('metric')
+      .sum({ total: 'value' })
+      .groupBy('metric');
 
-    const apiCallsLastHour = recentRecords
-      .filter((r) => r.metric === 'api_calls')
-      .reduce((sum, r) => sum + r.value, 0);
+    const recentByMetric = new Map<string, number>();
+    for (const row of recentTotals as Array<{ metric: string; total: unknown }>) {
+      recentByMetric.set(row.metric, this.toNumber(row.total));
+    }
 
-    const tokensLastHour = recentRecords
-      .filter((r) => r.metric === 'tokens_input' || r.metric === 'tokens_output')
-      .reduce((sum, r) => sum + r.value, 0);
+    const apiCallsLastHour = recentByMetric.get('api_calls') ?? 0;
+    const tokensLastHour = (recentByMetric.get('tokens_input') ?? 0) + (recentByMetric.get('tokens_output') ?? 0);
 
     return {
       apiCallsPerMinute: apiCallsLastHour / 60,

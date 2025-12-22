@@ -4,7 +4,7 @@ Implements Server-Sent Events (SSE) for streaming completions
 """
 
 from typing import AsyncGenerator, Dict, Any
-from openai import OpenAI
+from openai import AsyncOpenAI
 import json
 import logging
 
@@ -12,7 +12,8 @@ logger = logging.getLogger(__name__)
 
 class StreamingService:
     def __init__(self):
-        self.client = OpenAI()
+        # Async client enables true non-blocking streaming in FastAPI.
+        self.client = AsyncOpenAI()
     
     async def stream_chat_completion(
         self,
@@ -28,7 +29,7 @@ class StreamingService:
             JSON-formatted chunks with delta content
         """
         try:
-            stream = self.client.chat.completions.create(
+            stream = await self.client.chat.completions.create(
                 model=model,
                 messages=messages,
                 temperature=temperature,
@@ -36,12 +37,11 @@ class StreamingService:
                 stream=True
             )
             
-            for chunk in stream:
-                if chunk.choices[0].delta.content:
-                    yield json.dumps({
-                        "type": "content",
-                        "content": chunk.choices[0].delta.content
-                    }) + "\n"
+            async for chunk in stream:
+                delta = chunk.choices[0].delta
+                content = getattr(delta, "content", None)
+                if content:
+                    yield json.dumps({"type": "content", "content": content}) + "\n"
             
             # Send completion signal
             yield json.dumps({
