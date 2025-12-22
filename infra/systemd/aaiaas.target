@@ -1,0 +1,7 @@
+[Unit]
+Description=aaIaaS.ai platform (all services)
+Wants=aaiaas-infra.service aaiaas-api-control.service aaiaas-api-ai.service aaiaas-web.service
+After=network-online.target docker.service
+
+[Install]
+WantedBy=multi-user.target
