@@ -5,7 +5,8 @@
   "description": "Automation & AI as a Service Platform",
   "workspaces": [
     "apps/*",
-    "packages/*"
+    "packages/*",
+    "command-center"
   ],
   "scripts": {
     "dev": "turbo run dev",
