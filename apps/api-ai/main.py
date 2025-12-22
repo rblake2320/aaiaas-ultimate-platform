@@ -37,6 +37,37 @@ from services.orchestrator_api import router as orchestrator_router
 
 app.include_router(orchestrator_router, prefix="/api/v1/orchestrator")
 
+# GitHub webhook receiver
+from services.github_webhooks import router as github_router
+
+app.include_router(github_router, prefix="/api/v1/integrations/github")
+
+# Optional: auto-register webhooks per configured repo on startup
+from services.github_webhook_registration import (
+    ensure_webhooks_registered,
+    load_github_webhook_settings_from_env,
+)
+
+
+@app.on_event("startup")
+async def _maybe_register_github_webhooks() -> None:
+    auto = os.getenv("GITHUB_WEBHOOK_AUTO_REGISTER", "false").lower() in {"1", "true", "yes"}
+    if not auto:
+        return
+    settings = load_github_webhook_settings_from_env()
+    if not settings:
+        logger.warning(
+            "GITHUB_WEBHOOK_AUTO_REGISTER is enabled but missing required env vars "
+            "(GITHUB_TOKEN, GITHUB_WEBHOOK_URL, GITHUB_WEBHOOK_SECRET, GITHUB_WEBHOOK_REPOS)."
+        )
+        return
+    try:
+        results = await ensure_webhooks_registered(settings)
+        logger.info("GitHub webhooks ensured: %s", results)
+    except Exception as e:
+        logger.error("Failed to register GitHub webhooks: %s", str(e))
+        # Don't crash the API on startup for registration issues.
+
 # Models
 class HealthResponse(BaseModel):
     status: str
