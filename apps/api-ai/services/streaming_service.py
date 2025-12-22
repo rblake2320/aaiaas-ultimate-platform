@@ -4,7 +4,6 @@ Implements Server-Sent Events (SSE) for streaming completions
 """
 
 from typing import AsyncGenerator, Dict, Any
-from openai import OpenAI
 import json
 import logging
 
@@ -12,7 +11,14 @@ logger = logging.getLogger(__name__)
 
 class StreamingService:
     def __init__(self):
-        self.client = OpenAI()
+        self._client = None
+
+    def _get_client(self):
+        from services.openai_client import get_openai_client
+
+        if self._client is None:
+            self._client = get_openai_client()
+        return self._client
     
     async def stream_chat_completion(
         self,
@@ -28,7 +34,8 @@ class StreamingService:
             JSON-formatted chunks with delta content
         """
         try:
-            stream = self.client.chat.completions.create(
+            client = self._get_client()
+            stream = client.chat.completions.create(
                 model=model,
                 messages=messages,
                 temperature=temperature,
