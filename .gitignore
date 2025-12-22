@@ -45,6 +45,9 @@ Thumbs.db
 # Turbo
 .turbo/
 
+# Sentinel
+.sentinel/
+
 # TypeScript
 *.tsbuildinfo
 

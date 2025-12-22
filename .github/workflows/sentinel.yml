@@ -1,0 +1,54 @@
+name: Sentinel
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "17 3 * * *" # daily at 03:17 UTC
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: npm
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Sentinel dependencies
+        run: python -m pip install --upgrade pip && pip install -r apps/sentinel/requirements.txt
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Run Sentinel scan
+        id: scan
+        continue-on-error: true
+        run: python apps/sentinel/main.py scan --config .sentinel.yml --out .sentinel/reports/latest.json
+
+      - name: Diagnose report
+        run: python apps/sentinel/main.py diagnose .sentinel/reports/latest.json --out .sentinel/reports/latest.diagnosis.json
+
+      - name: Propose plan (no LLM)
+        run: python apps/sentinel/main.py propose .sentinel/reports/latest.json --provider none
+
+      - name: Upload Sentinel artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sentinel-artifacts
+          path: .sentinel/**
+          if-no-files-found: ignore
+
+      - name: Fail if scan failed
+        if: steps.scan.outcome != 'success'
+        run: exit 1
+

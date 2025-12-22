@@ -1,0 +1,35 @@
+version: 1
+workspace_root: .
+reports_dir: .sentinel/reports
+patches_dir: .sentinel/patches
+
+# Example: extend/override checks (copy to .sentinel.yml and edit).
+checks:
+  - id: node.lint
+    name: Node lint
+    cwd: .
+    command: npm run lint --if-present
+    timeout_sec: 900
+    required_tools: [npm]
+
+  - id: api-control.lint
+    name: api-control eslint
+    cwd: apps/api-control
+    command: npm run lint
+    timeout_sec: 900
+    required_tools: [npm]
+
+  - id: web.type-check
+    name: web type-check
+    cwd: apps/web
+    command: npm run type-check
+    timeout_sec: 900
+    required_tools: [npm]
+
+  - id: python.syntax
+    name: Python syntax compile
+    cwd: .
+    command: python3 -m compileall apps/api-ai -q
+    timeout_sec: 300
+    required_tools: [python3]
+
