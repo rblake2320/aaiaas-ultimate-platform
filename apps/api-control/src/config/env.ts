@@ -18,6 +18,12 @@ const envSchema = z.object({
   OPENAI_API_KEY: z.string().optional(),
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  GITHUB_WEBHOOK_SECRET: z.string().optional(),
+  WORKFLOW_SCHEDULER_ENABLED: z
+    .string()
+    .transform((v) => v.toLowerCase() === 'true')
+    .default('true'),
+  WORKFLOW_SCHEDULER_POLL_MS: z.string().default('30000'),
   LOG_LEVEL: z.string().default('info'),
 });
 
