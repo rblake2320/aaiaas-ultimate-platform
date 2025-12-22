@@ -72,6 +72,11 @@ cp .env.example .env
 docker-compose up -d
 ```
 
+To run the **full stack in Docker** (web + both APIs):
+```bash
+docker-compose --profile app up -d --build
+```
+
 5. **Run database migrations**
 ```bash
 npm run db:migrate
