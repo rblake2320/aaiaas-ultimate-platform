@@ -1,0 +1,42 @@
+version: 1
+workspace_root: .
+reports_dir: .sentinel/reports
+patches_dir: .sentinel/patches
+
+# Default checks for this repo (mirrors existing CI + test-platform.sh basics).
+checks:
+  - id: node.lint
+    name: Node lint (turbo)
+    cwd: .
+    command: npm run lint --if-present
+    timeout_sec: 900
+    required_tools: [npm]
+
+  - id: node.type-check
+    name: Node type-check (if present)
+    cwd: .
+    command: npm run type-check --if-present
+    timeout_sec: 900
+    required_tools: [npm]
+
+  - id: node.build
+    name: Node build (turbo)
+    cwd: .
+    command: npm run build
+    timeout_sec: 1800
+    required_tools: [npm]
+
+  - id: node.test
+    name: Node tests (turbo)
+    cwd: .
+    command: npm test
+    timeout_sec: 1800
+    required_tools: [npm]
+
+  - id: python.syntax
+    name: Python syntax (compileall apps/api-ai)
+    cwd: .
+    command: python3 -m compileall apps/api-ai -q
+    timeout_sec: 300
+    required_tools: [python3]
+
