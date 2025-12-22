@@ -5,21 +5,22 @@ Implements semantic search with embeddings and context-aware generation
 
 from typing import List, Dict, Any, Optional
 import numpy as np
-from openai import OpenAI
 import logging
 
 logger = logging.getLogger(__name__)
 
 class RAGService:
     def __init__(self):
-        self.client = OpenAI()
         self.embedding_model = "text-embedding-ada-002"
         self.chat_model = "gpt-4.1-mini"
         
     async def create_embeddings(self, texts: List[str]) -> List[List[float]]:
         """Create embeddings for multiple texts"""
         try:
-            response = self.client.embeddings.create(
+            from services.openai_client import get_openai_client
+
+            client = get_openai_client()
+            response = client.embeddings.create(
                 model=self.embedding_model,
                 input=texts
             )
@@ -111,7 +112,10 @@ class RAGService:
         
         # Generate response
         try:
-            response = self.client.chat.completions.create(
+            from services.openai_client import get_openai_client
+
+            client = get_openai_client()
+            response = client.chat.completions.create(
                 model=self.chat_model,
                 messages=messages,
                 temperature=temperature,

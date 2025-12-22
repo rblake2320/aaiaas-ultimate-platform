@@ -496,6 +496,38 @@ The API uses standard HTTP status codes and returns detailed error messages in J
 
 Common status codes include 400 (Bad Request), 401 (Unauthorized), 403 (Forbidden), 404 (Not Found), 429 (Too Many Requests), and 500 (Internal Server Error).
 
+## Auto-Fix System
+
+The auto-fix endpoint generates actionable fix suggestions (and optionally a full “patched” output) from an error report, stack trace, or malformed payload.
+
+```bash
+curl -X POST https://api.aaiaas.ai/api/v1/auto-fix \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d @- <<'JSON'
+{
+  "kind": "json",
+  "want_patch": true,
+  "problem": "{'name': 'Ada', 'age': 42,}"
+}
+JSON
+
+# Example response
+{
+  "status": "success",
+  "used_llm": false,
+  "suggestions": [
+    {
+      "title": "Repair JSON formatting",
+      "rationale": "Input looks like JSON but fails strict parsing (common issues: single quotes, trailing commas).",
+      "steps": ["Replace single quotes with double quotes for keys/strings.", "Remove trailing commas before '}' or ']'.", "Validate the result with a strict JSON parser."],
+      "confidence": 0.85,
+      "patch": "{\n  \"age\": 42,\n  \"name\": \"Ada\"\n}"
+    }
+  ]
+}
+```
+
 ## Rate Limiting
 
 All API endpoints are subject to rate limiting based on your subscription plan and API key configuration. Rate limit information is included in response headers.

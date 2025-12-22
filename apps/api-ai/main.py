@@ -110,9 +110,9 @@ async def chat_completion(
     Generate chat completion using LLM
     """
     try:
-        from openai import OpenAI
-        
-        client = OpenAI()
+        from services.openai_client import get_openai_client
+
+        client = get_openai_client()
         
         # Convert messages to OpenAI format
         messages = [{"role": msg.role, "content": msg.content} for msg in request.messages]
@@ -152,9 +152,9 @@ async def text_completion(
     Generate text completion
     """
     try:
-        from openai import OpenAI
-        
-        client = OpenAI()
+        from services.openai_client import get_openai_client
+
+        client = get_openai_client()
         
         # Use chat completion for text completion
         response = client.chat.completions.create(
@@ -188,9 +188,9 @@ async def create_embeddings(
     Generate embeddings for text
     """
     try:
-        from openai import OpenAI
-        
-        client = OpenAI()
+        from services.openai_client import get_openai_client
+
+        client = get_openai_client()
         
         # Ensure input is a list
         inputs = [request.input] if isinstance(request.input, str) else request.input
@@ -499,6 +499,7 @@ async def batch_process(
 # OCR Service with DeepSeek-OCR
 from services.ocr_service import ocr_service
 from fastapi import File, UploadFile
+from services.auto_fix_service import auto_fix_service
 
 class OCRRequest(BaseModel):
     image: str  # base64 encoded image
@@ -714,4 +715,60 @@ async def ocr_capabilities():
         "max_file_size": "10MB",
         "batch_limit": 100
     }
+
+
+# Auto-Fix System
+class AutoFixRequest(BaseModel):
+    problem: str = Field(..., min_length=1)
+    kind: str = Field(default="general")
+    context: Optional[str] = None
+    language: Optional[str] = None
+    want_patch: bool = False
+    model: str = "gpt-4.1-mini"
+    temperature: float = Field(default=0.2, ge=0, le=2)
+    max_tokens: int = Field(default=700, ge=1, le=4096)
+
+
+class AutoFixSuggestion(BaseModel):
+    title: str
+    rationale: str
+    steps: List[str]
+    confidence: float = Field(ge=0, le=1)
+    patch: Optional[str] = None
+
+
+class AutoFixResponse(BaseModel):
+    status: str
+    used_llm: bool
+    suggestions: List[AutoFixSuggestion]
+
+
+@app.post("/api/v1/auto-fix", response_model=AutoFixResponse)
+async def auto_fix(
+    request: AutoFixRequest,
+    api_key: str = Depends(verify_api_key)
+):
+    """
+    Generate fix suggestions (and optionally a patch) for a given problem.
+    """
+    try:
+        result = await auto_fix_service.auto_fix(
+            kind=request.kind,
+            problem=request.problem,
+            context=request.context,
+            language=request.language,
+            want_patch=request.want_patch,
+            model=request.model,
+            temperature=request.temperature,
+            max_tokens=request.max_tokens,
+        )
+
+        return AutoFixResponse(
+            status="success",
+            used_llm=result.used_llm,
+            suggestions=[AutoFixSuggestion(**s) for s in result.suggestions],
+        )
+    except Exception as e:
+        logger.error(f"Auto-fix error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
