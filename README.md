@@ -7,6 +7,7 @@ Enterprise-grade AI-as-a-Service platform with comprehensive automation, multi-t
 - 📄 **OCR & Document Processing**: DeepSeek-OCR for document scanning, text extraction, and visual understanding
 - 🤖 **AI/ML Services**: LLM orchestration, RAG, embeddings, and agent framework
 - 🧠 **Agent Orchestrator (24/7)**: Persistent job runner with crash recovery and retries (see `AGENT_ORCHESTRATOR.md`)
+- 🛰️ **Command Center**: Multi-repo agent management API + dashboard (see `COMMAND_CENTER.md`)
 - 🔄 **Workflow Automation**: Visual workflow builder and execution engine
 - 👥 **Multi-Tenancy**: Organization-based isolation with RBAC
 - 🔐 **Enterprise Auth**: JWT, API keys, SSO/SAML ready
@@ -86,6 +87,7 @@ The services will be available at:
 - Frontend: http://localhost:3000
 - Control Plane API: http://localhost:4000
 - AI Services API: http://localhost:5000
+- Command Center API: http://localhost:4100
 - API Docs: http://localhost:4000/docs
 
 ## Project Structure
@@ -96,6 +98,7 @@ aaiaas/
 │   ├── web/                 # Next.js frontend
 │   ├── api-control/         # Express control plane API
 │   ├── api-ai/              # FastAPI AI services
+│   ├── command-center/      # Multi-repo agent management API
 │   └── docs/                # Documentation site
 ├── packages/
 │   ├── ui/                  # Shared UI components

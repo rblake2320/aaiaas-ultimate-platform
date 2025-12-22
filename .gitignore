@@ -48,6 +48,10 @@ Thumbs.db
 # TypeScript
 *.tsbuildinfo
 
+# Command Center local store
+command-center-store.json
+apps/command-center/command-center-store.json
+
 # Docker
 *.log
 
