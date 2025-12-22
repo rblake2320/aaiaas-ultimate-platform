@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
 import os
 import logging
 from datetime import datetime
@@ -247,6 +247,7 @@ from services.rag_service import rag_service
 from services.agent_service import Agent, Tool, create_agent
 from services.streaming_service import streaming_service
 from fastapi.responses import StreamingResponse
+from services.issue_detection_service import issue_detection_service
 
 # RAG Endpoints
 class RAGIndexRequest(BaseModel):
@@ -719,4 +720,56 @@ async def ocr_capabilities():
         "max_file_size": "10MB",
         "batch_limit": 100
     }
+
+
+# Issue Detection Engine
+class IssueDetectRequest(BaseModel):
+    kind: Literal["text", "api_error", "workflow_run", "ocr_result"] = "text"
+    text: Optional[str] = None
+    payload: Optional[Dict[str, Any]] = None
+    max_issues: int = Field(default=10, ge=1, le=50)
+    severity_threshold: Literal["low", "medium", "high", "critical"] = "low"
+
+
+class IssueDetectResponse(BaseModel):
+    kind: str
+    issues: List[Dict[str, Any]]
+    count: int
+
+
+@app.get("/api/v1/issues/capabilities")
+async def issue_detection_capabilities(
+    api_key: str = Depends(verify_api_key),
+):
+    """
+    Get issue detection service capabilities.
+    """
+    return issue_detection_service.capabilities()
+
+
+@app.post("/api/v1/issues/detect", response_model=IssueDetectResponse)
+async def detect_issues(
+    request: IssueDetectRequest,
+    api_key: str = Depends(verify_api_key),
+):
+    """
+    Detect issues in a payload/text. This is a deterministic rule-based engine.
+
+    Examples:
+    - kind=text, text="401 Unauthorized"
+    - kind=api_error, payload={"status": 429, "message": "Rate limit exceeded"}
+    - kind=workflow_run, payload={"status":"failed","error_message":"ECONNREFUSED ..."}
+    """
+    try:
+        result = issue_detection_service.detect(
+            kind=request.kind,
+            text=request.text,
+            payload=request.payload,
+            max_issues=request.max_issues,
+            severity_threshold=request.severity_threshold,
+        )
+        return IssueDetectResponse(**result)
+    except Exception as e:
+        logger.error(f"Issue detection error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
