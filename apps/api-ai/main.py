@@ -37,6 +37,11 @@ from services.orchestrator_api import router as orchestrator_router
 
 app.include_router(orchestrator_router, prefix="/api/v1/orchestrator")
 
+# Repo health scoring + prioritization
+from services.repo_health_api import router as repo_health_router
+
+app.include_router(repo_health_router, prefix="/api/v1/repo")
+
 # Models
 class HealthResponse(BaseModel):
     status: str
