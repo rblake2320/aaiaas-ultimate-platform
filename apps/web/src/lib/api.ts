@@ -6,10 +6,12 @@ const AI_API_URL = process.env.NEXT_PUBLIC_AI_API_URL || 'http://localhost:5000'
 class ApiClient {
   private client: AxiosInstance;
   private aiClient: AxiosInstance;
+  private accessToken: string | null = null;
 
   constructor() {
     this.client = axios.create({
       baseURL: API_URL,
+      withCredentials: true,
       headers: {
         'Content-Type': 'application/json',
       },
@@ -17,6 +19,7 @@ class ApiClient {
 
     this.aiClient = axios.create({
       baseURL: AI_API_URL,
+      withCredentials: true,
       headers: {
         'Content-Type': 'application/json',
       },
@@ -61,39 +64,34 @@ class ApiClient {
 
   private getToken(): string | null {
     if (typeof window === 'undefined') return null;
-    return localStorage.getItem('accessToken');
+    if (this.accessToken) return this.accessToken;
+    return sessionStorage.getItem('accessToken');
   }
 
-  private getRefreshToken(): string | null {
-    if (typeof window === 'undefined') return null;
-    return localStorage.getItem('refreshToken');
-  }
-
-  private setTokens(accessToken: string, refreshToken: string) {
+  private setAccessToken(accessToken: string) {
     if (typeof window === 'undefined') return;
-    localStorage.setItem('accessToken', accessToken);
-    localStorage.setItem('refreshToken', refreshToken);
+    this.accessToken = accessToken;
+    sessionStorage.setItem('accessToken', accessToken);
   }
 
-  private clearTokens() {
+  private clearAccessToken() {
     if (typeof window === 'undefined') return;
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
+    this.accessToken = null;
+    sessionStorage.removeItem('accessToken');
   }
 
   private async refreshToken(): Promise<boolean> {
     try {
-      const refreshToken = this.getRefreshToken();
-      if (!refreshToken) return false;
+      const response = await axios.post(
+        `${API_URL}/api/v1/auth/refresh`,
+        {},
+        { withCredentials: true }
+      );
 
-      const response = await axios.post(`${API_URL}/api/v1/auth/refresh`, {
-        refreshToken,
-      });
-
-      this.setTokens(response.data.accessToken, refreshToken);
+      this.setAccessToken(response.data.accessToken);
       return true;
     } catch (error) {
-      this.clearTokens();
+      this.clearAccessToken();
       return false;
     }
   }
@@ -106,22 +104,19 @@ class ApiClient {
     organizationName?: string;
   }) {
     const response = await this.client.post('/api/v1/auth/register', data);
-    this.setTokens(response.data.accessToken, response.data.refreshToken);
+    this.setAccessToken(response.data.accessToken);
     return response.data;
   }
 
   async login(data: { email: string; password: string }) {
     const response = await this.client.post('/api/v1/auth/login', data);
-    this.setTokens(response.data.accessToken, response.data.refreshToken);
+    this.setAccessToken(response.data.accessToken);
     return response.data;
   }
 
   async logout() {
-    const refreshToken = this.getRefreshToken();
-    if (refreshToken) {
-      await this.client.post('/api/v1/auth/logout', { refreshToken });
-    }
-    this.clearTokens();
+    await this.client.post('/api/v1/auth/logout', {});
+    this.clearAccessToken();
   }
 
   async getCurrentUser() {

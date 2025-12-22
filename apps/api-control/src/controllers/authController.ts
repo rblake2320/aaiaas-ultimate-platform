@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import { authService } from '../services/authService';
 import { logger } from '../utils/logger';
+import { env } from '../config/env';
 
 const registerSchema = z.object({
   email: z.string().email(),
@@ -16,8 +17,30 @@ const loginSchema = z.object({
 });
 
 const refreshSchema = z.object({
-  refreshToken: z.string(),
+  refreshToken: z.string().optional(),
 });
+
+function setRefreshTokenCookie(res: Response, refreshToken: string) {
+  const isProd = env.NODE_ENV === 'production';
+  // Keep cookie scoped to auth routes
+  res.cookie('refreshToken', refreshToken, {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: 'lax',
+    path: '/api/v1/auth',
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+  });
+}
+
+function clearRefreshTokenCookie(res: Response) {
+  const isProd = env.NODE_ENV === 'production';
+  res.clearCookie('refreshToken', {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: 'lax',
+    path: '/api/v1/auth',
+  });
+}
 
 export class AuthController {
   async register(req: Request, res: Response) {
@@ -26,6 +49,9 @@ export class AuthController {
     const result = await authService.register(input);
 
     logger.info('User registered', { userId: result.user.id, email: result.user.email });
+
+    // Prefer HttpOnly cookie storage for refresh token (mitigates XSS token theft).
+    setRefreshTokenCookie(res, result.refreshToken);
 
     res.status(201).json(result);
   }
@@ -37,21 +63,36 @@ export class AuthController {
 
     logger.info('User logged in', { userId: result.user.id, email: result.user.email });
 
+    // Prefer HttpOnly cookie storage for refresh token (mitigates XSS token theft).
+    setRefreshTokenCookie(res, result.refreshToken);
+
     res.json(result);
   }
 
   async refresh(req: Request, res: Response) {
-    const { refreshToken } = refreshSchema.parse(req.body);
+    const { refreshToken } = refreshSchema.parse(req.body ?? {});
+    const tokenFromCookie = (req as any).cookies?.refreshToken as string | undefined;
+    const token = refreshToken || tokenFromCookie;
 
-    const result = await authService.refreshAccessToken(refreshToken);
+    if (!token) {
+      return res.status(401).json({ error: 'Refresh token required' });
+    }
+
+    const result = await authService.refreshAccessToken(token);
 
     res.json(result);
   }
 
   async logout(req: Request, res: Response) {
-    const { refreshToken } = refreshSchema.parse(req.body);
+    const { refreshToken } = refreshSchema.parse(req.body ?? {});
+    const tokenFromCookie = (req as any).cookies?.refreshToken as string | undefined;
+    const token = refreshToken || tokenFromCookie;
 
-    await authService.logout(refreshToken);
+    if (token) {
+      await authService.logout(token);
+    }
+
+    clearRefreshTokenCookie(res);
 
     res.json({ message: 'Logged out successfully' });
   }
