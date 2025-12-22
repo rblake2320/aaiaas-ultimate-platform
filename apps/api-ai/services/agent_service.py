@@ -8,6 +8,9 @@ from openai import OpenAI
 import json
 import logging
 from datetime import datetime
+import ast
+import math
+import operator
 
 logger = logging.getLogger(__name__)
 
@@ -272,10 +275,81 @@ async def search_web(query: str) -> Dict[str, Any]:
 async def calculate(expression: str) -> Dict[str, Any]:
     """Calculator tool"""
     try:
-        result = eval(expression)
+        result = safe_math_eval(expression)
         return {"expression": expression, "result": result}
     except Exception as e:
         return {"error": str(e)}
+
+def safe_math_eval(expression: str) -> float:
+    """
+    Safely evaluate a math-only expression (no attribute access, imports, calls outside allowlist).
+    Supports: +, -, *, /, %, **, parentheses, and a small allowlist of math functions/constants.
+    """
+    allowed_funcs = {
+        "sqrt": math.sqrt,
+        "sin": math.sin,
+        "cos": math.cos,
+        "tan": math.tan,
+        "log": math.log,
+        "log10": math.log10,
+        "exp": math.exp,
+        "abs": abs,
+        "round": round,
+    }
+    allowed_names = {
+        "pi": math.pi,
+        "e": math.e,
+    }
+    bin_ops = {
+        ast.Add: operator.add,
+        ast.Sub: operator.sub,
+        ast.Mult: operator.mul,
+        ast.Div: operator.truediv,
+        ast.Mod: operator.mod,
+        ast.Pow: operator.pow,
+    }
+    unary_ops = {
+        ast.UAdd: operator.pos,
+        ast.USub: operator.neg,
+    }
+
+    node = ast.parse(expression, mode="eval")
+
+    def _eval(n: ast.AST):
+        if isinstance(n, ast.Expression):
+            return _eval(n.body)
+        if isinstance(n, ast.Constant):
+            if isinstance(n.value, (int, float)):
+                return n.value
+            raise ValueError("Only numeric constants are allowed")
+        if isinstance(n, ast.BinOp):
+            op_type = type(n.op)
+            if op_type not in bin_ops:
+                raise ValueError("Operator not allowed")
+            return bin_ops[op_type](_eval(n.left), _eval(n.right))
+        if isinstance(n, ast.UnaryOp):
+            op_type = type(n.op)
+            if op_type not in unary_ops:
+                raise ValueError("Unary operator not allowed")
+            return unary_ops[op_type](_eval(n.operand))
+        if isinstance(n, ast.Name):
+            if n.id in allowed_names:
+                return allowed_names[n.id]
+            raise ValueError(f"Unknown identifier: {n.id}")
+        if isinstance(n, ast.Call):
+            if not isinstance(n.func, ast.Name):
+                raise ValueError("Only simple function calls are allowed")
+            fn_name = n.func.id
+            if fn_name not in allowed_funcs:
+                raise ValueError(f"Function not allowed: {fn_name}")
+            args = [_eval(a) for a in n.args]
+            if n.keywords:
+                raise ValueError("Keyword arguments are not allowed")
+            return allowed_funcs[fn_name](*args)
+        # Disallow everything else: attributes, subscripts, comprehensions, lambdas, etc.
+        raise ValueError(f"Expression not allowed: {type(n).__name__}")
+
+    return _eval(node)
 
 async def get_current_time() -> Dict[str, Any]:
     """Get current time"""

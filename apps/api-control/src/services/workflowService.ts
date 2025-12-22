@@ -1,6 +1,7 @@
 import { db } from '../config/database';
 import { logger } from '../utils/logger';
 import axios from 'axios';
+import jexl from 'jexl';
 
 export interface WorkflowNode {
   id: string;
@@ -187,7 +188,7 @@ export class WorkflowEngine {
     
     // Simple condition evaluation
     // In production, use a proper expression evaluator
-    const result = this.evaluateCondition(condition, context.variables);
+    const result = await this.evaluateCondition(condition, context.variables);
     
     return { conditionMet: result };
   }
@@ -325,12 +326,18 @@ export class WorkflowEngine {
     return obj;
   }
 
-  private evaluateCondition(condition: string, variables: Record<string, any>): boolean {
-    // Simple condition evaluation
-    // In production, use a safe expression evaluator
+  private async evaluateCondition(
+    condition: string,
+    variables: Record<string, any>
+  ): Promise<boolean> {
+    // Safe condition evaluation:
+    // - Convert `{{var}}` placeholders into variable identifiers (not values)
+    // - Evaluate using a sandboxed expression evaluator (no access to JS globals)
     try {
-      const interpolated = this.interpolateString(condition, variables);
-      return eval(interpolated);
+      if (!condition || typeof condition !== 'string') return false;
+      const expression = condition.replace(/\{\{(\w+)\}\}/g, '$1');
+      const result = await (jexl as any).eval(expression, variables);
+      return Boolean(result);
     } catch {
       return false;
     }

@@ -7,6 +7,13 @@ config({ path: '.env.test' });
 // Set test environment
 process.env.NODE_ENV = 'test';
 
+// Provide required env vars for module initialization in tests
+process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/aaiaas_test';
+process.env.JWT_SECRET =
+  process.env.JWT_SECRET || 'TEST_ONLY_CHANGE_ME_ABCDEFGHIJKLMNOPQRSTUVWXYZ_123456';
+process.env.REFRESH_TOKEN_SECRET =
+  process.env.REFRESH_TOKEN_SECRET || 'TEST_ONLY_CHANGE_ME_DIFFERENT_ABCDEFGHIJKLMNOPQRSTUVWXYZ_654321';
+
 // Mock console methods to reduce noise in tests
 global.console = {
   ...console,

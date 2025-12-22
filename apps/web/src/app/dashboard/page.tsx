@@ -79,7 +79,7 @@ export default function DashboardPage() {
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2">Welcome back, {user?.name}!</h1>
           <p className="text-muted-foreground">
-            Here's what's happening with your AI platform
+            Here&apos;s what&apos;s happening with your AI platform
           </p>
         </div>
 
