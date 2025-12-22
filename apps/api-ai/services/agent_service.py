@@ -4,7 +4,7 @@ Implements autonomous agents with tool calling, memory, and planning
 """
 
 from typing import List, Dict, Any, Optional, Callable
-from openai import OpenAI
+from openai import AsyncOpenAI
 import json
 import logging
 from datetime import datetime
@@ -106,7 +106,8 @@ class Agent:
         self.temperature = temperature
         self.max_iterations = max_iterations
         self.memory = AgentMemory()
-        self.client = OpenAI()
+        # Async client prevents blocking the FastAPI event loop.
+        self.client = AsyncOpenAI()
         
         # Tool registry
         self.tool_registry = {tool.name: tool for tool in self.tools}
@@ -157,7 +158,7 @@ class Agent:
             
             # Call LLM
             try:
-                response = self.client.chat.completions.create(**api_params)
+                response = await self.client.chat.completions.create(**api_params)
                 choice = response.choices[0]
                 message = choice.message
                 

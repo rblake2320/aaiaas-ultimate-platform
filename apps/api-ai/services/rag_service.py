@@ -5,21 +5,22 @@ Implements semantic search with embeddings and context-aware generation
 
 from typing import List, Dict, Any, Optional
 import numpy as np
-from openai import OpenAI
+from openai import AsyncOpenAI
 import logging
 
 logger = logging.getLogger(__name__)
 
 class RAGService:
     def __init__(self):
-        self.client = OpenAI()
+        # Async client prevents blocking the FastAPI event loop.
+        self.client = AsyncOpenAI()
         self.embedding_model = "text-embedding-ada-002"
         self.chat_model = "gpt-4.1-mini"
         
     async def create_embeddings(self, texts: List[str]) -> List[List[float]]:
         """Create embeddings for multiple texts"""
         try:
-            response = self.client.embeddings.create(
+            response = await self.client.embeddings.create(
                 model=self.embedding_model,
                 input=texts
             )
@@ -30,9 +31,13 @@ class RAGService:
     
     def cosine_similarity(self, a: List[float], b: List[float]) -> float:
         """Calculate cosine similarity between two vectors"""
-        a_np = np.array(a)
-        b_np = np.array(b)
-        return np.dot(a_np, b_np) / (np.linalg.norm(a_np) * np.linalg.norm(b_np))
+        # Kept for compatibility, but semantic_search uses a vectorized path.
+        a_np = np.asarray(a, dtype=np.float32)
+        b_np = np.asarray(b, dtype=np.float32)
+        denom = (np.linalg.norm(a_np) * np.linalg.norm(b_np))
+        if denom == 0:
+            return 0.0
+        return float(np.dot(a_np, b_np) / denom)
     
     async def semantic_search(
         self,
@@ -53,20 +58,38 @@ class RAGService:
         """
         # Create query embedding
         query_embedding = (await self.create_embeddings([query]))[0]
-        
-        # Calculate similarities
-        results = []
+
+        # Fast path: vectorize similarity computation across all documents.
+        docs_with_embeddings: List[Dict[str, Any]] = []
+        embeddings: List[List[float]] = []
         for doc in documents:
-            if 'embedding' in doc:
-                similarity = self.cosine_similarity(query_embedding, doc['embedding'])
-                results.append({
-                    **doc,
-                    'similarity': similarity
-                })
-        
-        # Sort by similarity and return top_k
-        results.sort(key=lambda x: x['similarity'], reverse=True)
-        return results[:top_k]
+            emb = doc.get("embedding")
+            if emb is not None:
+                docs_with_embeddings.append(doc)
+                embeddings.append(emb)
+
+        if not docs_with_embeddings:
+            return []
+
+        q = np.asarray(query_embedding, dtype=np.float32)
+        q_norm = np.linalg.norm(q)
+        if q_norm == 0:
+            return [{**doc, "similarity": 0.0} for doc in docs_with_embeddings[:top_k]]
+
+        mat = np.asarray(embeddings, dtype=np.float32)
+        denom = (np.linalg.norm(mat, axis=1) * q_norm)
+        # Avoid divide-by-zero; treat zero-norm vectors as similarity 0.
+        denom = np.where(denom == 0, np.inf, denom)
+        sims = (mat @ q) / denom
+
+        top_k = min(top_k, len(docs_with_embeddings))
+        top_idx = np.argpartition(-sims, top_k - 1)[:top_k]
+        top_idx = top_idx[np.argsort(-sims[top_idx])]
+
+        return [
+            {**docs_with_embeddings[i], "similarity": float(sims[i])}
+            for i in top_idx
+        ]
     
     async def generate_with_context(
         self,
@@ -111,7 +134,7 @@ class RAGService:
         
         # Generate response
         try:
-            response = self.client.chat.completions.create(
+            response = await self.client.chat.completions.create(
                 model=self.chat_model,
                 messages=messages,
                 temperature=temperature,
@@ -191,6 +214,10 @@ class RAGService:
         Returns:
             List of text chunks
         """
+        if overlap >= chunk_size:
+            # Prevent non-advancing window (infinite loop).
+            overlap = max(0, chunk_size - 1)
+
         chunks = []
         start = 0
         

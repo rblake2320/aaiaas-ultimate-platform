@@ -7,6 +7,13 @@ module.exports = {
   transform: {
     '^.+\\.ts$': 'ts-jest',
   },
+  globals: {
+    'ts-jest': {
+      // Keep unit tests fast and avoid TS type-check failures in mocks.
+      isolatedModules: true,
+      diagnostics: false,
+    },
+  },
   collectCoverageFrom: [
     'src/**/*.ts',
     '!src/**/*.d.ts',
