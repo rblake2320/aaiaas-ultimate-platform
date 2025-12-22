@@ -6,6 +6,7 @@ Enterprise-grade AI-as-a-Service platform with comprehensive automation, multi-t
 
 - 📄 **OCR & Document Processing**: DeepSeek-OCR for document scanning, text extraction, and visual understanding
 - 🤖 **AI/ML Services**: LLM orchestration, RAG, embeddings, and agent framework
+- 🧠 **Agent Orchestrator (24/7)**: Persistent job runner with crash recovery and retries (see `AGENT_ORCHESTRATOR.md`)
 - 🔄 **Workflow Automation**: Visual workflow builder and execution engine
 - 👥 **Multi-Tenancy**: Organization-based isolation with RBAC
 - 🔐 **Enterprise Auth**: JWT, API keys, SSO/SAML ready
