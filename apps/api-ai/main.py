@@ -32,6 +32,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Agent Orchestrator API (enqueue/list runs)
+from services.orchestrator_api import router as orchestrator_router
+
+app.include_router(orchestrator_router, prefix="/api/v1/orchestrator")
+
 # Models
 class HealthResponse(BaseModel):
     status: str
