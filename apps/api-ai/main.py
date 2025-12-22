@@ -7,6 +7,8 @@ import os
 import logging
 from datetime import datetime
 
+from services.scheduler_service import shutdown_scheduler, start_scheduler
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -22,6 +24,15 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
 )
+
+@app.on_event("startup")
+async def _startup() -> None:
+    start_scheduler(app)
+
+
+@app.on_event("shutdown")
+async def _shutdown() -> None:
+    shutdown_scheduler(app)
 
 # CORS middleware
 app.add_middleware(
@@ -227,19 +238,6 @@ async def global_exception_handler(request, exc):
         status_code=500,
         content={"detail": "Internal server error"}
     )
-
-if __name__ == "__main__":
-    import uvicorn
-    
-    port = int(os.getenv("PORT", "5000"))
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=port,
-        reload=True,
-        log_level="info"
-    )
-
 
 
 # Advanced AI Services
@@ -720,3 +718,15 @@ async def ocr_capabilities():
         "batch_limit": 100
     }
 
+
+if __name__ == "__main__":
+    import uvicorn
+
+    port = int(os.getenv("PORT", "5000"))
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=port,
+        reload=True,
+        log_level="info",
+    )
