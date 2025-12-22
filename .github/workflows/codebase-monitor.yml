@@ -1,0 +1,37 @@
+# Codebase Monitoring Workflow
+# Scans repository content for leaked secrets / risky patterns.
+
+name: Codebase Monitor
+
+on:
+  push:
+    branches: [master, main, develop]
+  pull_request:
+    branches: [master, main, develop]
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run codebase monitor (fails on HIGH)
+        run: node scripts/codebase-monitor.js --format text --out reports/codebase-monitor-report.json
+
+      - name: Upload report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: codebase-monitor-report
+          path: reports/codebase-monitor-report.json
+

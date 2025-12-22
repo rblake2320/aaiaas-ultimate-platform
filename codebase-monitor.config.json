@@ -1,0 +1,27 @@
+{
+  "maxFileSizeBytes": 1048576,
+  "ignoreDirs": [
+    ".git",
+    "node_modules",
+    "reports",
+    ".next",
+    "dist",
+    "build",
+    "coverage",
+    ".turbo",
+    ".cache",
+    "__pycache__",
+    ".venv",
+    "venv"
+  ],
+  "ignoreFiles": [
+    "package-lock.json"
+  ],
+  "allowlistPathContains": [
+    ".env.example"
+  ],
+  "failOn": [
+    "high"
+  ]
+}
+
