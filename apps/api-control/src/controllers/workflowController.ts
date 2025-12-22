@@ -5,6 +5,17 @@ import { workflowEngine, WorkflowDefinition } from '../services/workflowService'
 import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 
+const triggerSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('manual') }),
+  z.object({ type: z.literal('every_5m') }),
+  z.object({ type: z.literal('hourly') }),
+  z.object({
+    type: z.literal('git_push'),
+    repo: z.string().min(1).optional(),
+    branch: z.string().min(1).optional(),
+  }),
+]);
+
 const workflowSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
@@ -15,11 +26,115 @@ const workflowSchema = z.object({
     next: z.array(z.string()).optional(),
   })),
   variables: z.record(z.any()).optional(),
+  trigger: triggerSchema.optional(),
 });
 
 const executeWorkflowSchema = z.object({
   input: z.record(z.any()).optional(),
 });
+
+function ceilToMinuteStep(date: Date, stepMinutes: number): Date {
+  const d = new Date(date);
+  d.setSeconds(0, 0);
+  const minutes = d.getMinutes();
+  const remainder = minutes % stepMinutes;
+  if (remainder !== 0) {
+    d.setMinutes(minutes + (stepMinutes - remainder));
+  }
+  // Ensure it's strictly in the future
+  if (d.getTime() <= date.getTime()) {
+    d.setMinutes(d.getMinutes() + stepMinutes);
+  }
+  return d;
+}
+
+function nextTopOfHour(date: Date): Date {
+  const d = new Date(date);
+  d.setMinutes(0, 0, 0);
+  d.setHours(d.getHours() + 1);
+  return d;
+}
+
+async function upsertWorkflowTrigger(params: {
+  workflowId: string;
+  organizationId: string;
+  trigger: z.infer<typeof triggerSchema>;
+}) {
+  const now = new Date();
+  const { workflowId, organizationId, trigger } = params;
+
+  if (trigger.type === 'manual') {
+    await db('workflow_triggers').where({ workflow_id: workflowId }).delete();
+    return;
+  }
+
+  let row: any;
+  if (trigger.type === 'every_5m') {
+    row = {
+      workflow_id: workflowId,
+      organization_id: organizationId,
+      type: 'interval',
+      interval_minutes: 5,
+      config: {},
+      is_active: true,
+      next_trigger_at: ceilToMinuteStep(now, 5),
+      updated_at: now,
+    };
+  } else if (trigger.type === 'hourly') {
+    row = {
+      workflow_id: workflowId,
+      organization_id: organizationId,
+      type: 'hourly',
+      interval_minutes: null,
+      config: {},
+      is_active: true,
+      next_trigger_at: nextTopOfHour(now),
+      updated_at: now,
+    };
+  } else {
+    row = {
+      workflow_id: workflowId,
+      organization_id: organizationId,
+      type: 'git_push',
+      interval_minutes: null,
+      config: {
+        ...(trigger.repo ? { repo: trigger.repo } : {}),
+        ...(trigger.branch ? { branch: trigger.branch } : {}),
+      },
+      is_active: true,
+      next_trigger_at: null,
+      updated_at: now,
+    };
+  }
+
+  const existing = await db('workflow_triggers').where({ workflow_id: workflowId }).first();
+  if (existing) {
+    await db('workflow_triggers').where({ workflow_id: workflowId }).update(row);
+  } else {
+    await db('workflow_triggers').insert({
+      id: uuidv4(),
+      created_at: now,
+      ...row,
+    });
+  }
+}
+
+function toTriggerResponse(triggerRow: any) {
+  if (!triggerRow) return { type: 'manual' as const };
+  if (triggerRow.type === 'hourly') return { type: 'hourly' as const, isActive: triggerRow.is_active };
+  if (triggerRow.type === 'interval' && triggerRow.interval_minutes === 5) {
+    return { type: 'every_5m' as const, isActive: triggerRow.is_active };
+  }
+  if (triggerRow.type === 'git_push') {
+    return {
+      type: 'git_push' as const,
+      isActive: triggerRow.is_active,
+      repo: triggerRow.config?.repo,
+      branch: triggerRow.config?.branch,
+    };
+  }
+  return { type: 'manual' as const };
+}
 
 export class WorkflowController {
   async create(req: any, res: Response) {
@@ -35,14 +150,19 @@ export class WorkflowController {
       created_by: userId,
       name: input.name,
       description: input.description,
-      definition: JSON.stringify({
+      definition: {
         nodes: input.nodes,
         variables: input.variables,
-      }),
+      },
       status: 'active',
     });
 
+    if (input.trigger) {
+      await upsertWorkflowTrigger({ workflowId, organizationId, trigger: input.trigger });
+    }
+
     const workflow = await db('workflows').where({ id: workflowId }).first();
+    const trigger = await db('workflow_triggers').where({ workflow_id: workflowId }).first();
 
     logger.info('Workflow created', { workflowId, organizationId });
 
@@ -51,6 +171,7 @@ export class WorkflowController {
       name: workflow.name,
       description: workflow.description,
       status: workflow.status,
+      trigger: toTriggerResponse(trigger),
       createdAt: workflow.created_at,
     });
   }
@@ -58,9 +179,22 @@ export class WorkflowController {
   async list(req: any, res: Response) {
     const organizationId = req.organization.id;
 
-    const workflows = await db('workflows')
-      .where({ organization_id: organizationId })
-      .orderBy('created_at', 'desc');
+    const workflows = await db('workflows as w')
+      .leftJoin('workflow_triggers as t', 't.workflow_id', 'w.id')
+      .where({ 'w.organization_id': organizationId })
+      .orderBy('w.created_at', 'desc')
+      .select(
+        'w.id',
+        'w.name',
+        'w.description',
+        'w.status',
+        'w.created_at',
+        'w.updated_at',
+        't.type as trigger_type',
+        't.interval_minutes as trigger_interval_minutes',
+        't.config as trigger_config',
+        't.is_active as trigger_is_active'
+      );
 
     res.json({
       workflows: workflows.map((w) => ({
@@ -68,6 +202,12 @@ export class WorkflowController {
         name: w.name,
         description: w.description,
         status: w.status,
+        trigger: toTriggerResponse({
+          type: w.trigger_type,
+          interval_minutes: w.trigger_interval_minutes,
+          config: w.trigger_config,
+          is_active: w.trigger_is_active,
+        }),
         createdAt: w.created_at,
         updatedAt: w.updated_at,
       })),
@@ -86,12 +226,15 @@ export class WorkflowController {
       return res.status(404).json({ error: 'Workflow not found' });
     }
 
+    const trigger = await db('workflow_triggers').where({ workflow_id: id }).first();
+
     res.json({
       id: workflow.id,
       name: workflow.name,
       description: workflow.description,
-      definition: JSON.parse(workflow.definition),
+      definition: workflow.definition,
       status: workflow.status,
+      trigger: toTriggerResponse(trigger),
       createdAt: workflow.created_at,
       updatedAt: workflow.updated_at,
     });
@@ -117,16 +260,21 @@ export class WorkflowController {
     if (input.name) updates.name = input.name;
     if (input.description !== undefined) updates.description = input.description;
     if (input.nodes || input.variables) {
-      const currentDef = JSON.parse(workflow.definition);
-      updates.definition = JSON.stringify({
+      const currentDef = workflow.definition || {};
+      updates.definition = {
         nodes: input.nodes || currentDef.nodes,
         variables: input.variables || currentDef.variables,
-      });
+      };
     }
 
     await db('workflows').where({ id }).update(updates);
 
+    if (input.trigger) {
+      await upsertWorkflowTrigger({ workflowId: id, organizationId, trigger: input.trigger });
+    }
+
     const updated = await db('workflows').where({ id }).first();
+    const trigger = await db('workflow_triggers').where({ workflow_id: id }).first();
 
     logger.info('Workflow updated', { workflowId: id, organizationId });
 
@@ -135,6 +283,7 @@ export class WorkflowController {
       name: updated.name,
       description: updated.description,
       status: updated.status,
+      trigger: toTriggerResponse(trigger),
       updatedAt: updated.updated_at,
     });
   }
@@ -180,7 +329,7 @@ export class WorkflowController {
       id: workflow.id,
       name: workflow.name,
       description: workflow.description,
-      ...JSON.parse(workflow.definition),
+      ...(workflow.definition || {}),
     };
 
     const executionId = uuidv4();
@@ -190,7 +339,6 @@ export class WorkflowController {
       .executeWorkflow(definition, {
         executionId,
         organizationId,
-        userId,
         variables: {},
       }, input.input)
       .catch((error) => {
@@ -226,9 +374,9 @@ export class WorkflowController {
       id: execution.id,
       workflowId: execution.workflow_id,
       status: execution.status,
-      input: execution.input ? JSON.parse(execution.input) : null,
-      output: execution.output ? JSON.parse(execution.output) : null,
-      error: execution.error,
+      input: execution.input ?? null,
+      output: execution.output ?? null,
+      error: execution.error_message ?? null,
       startedAt: execution.started_at,
       completedAt: execution.completed_at,
     });
@@ -249,7 +397,7 @@ export class WorkflowController {
         status: e.status,
         startedAt: e.started_at,
         completedAt: e.completed_at,
-        error: e.error,
+        error: e.error_message ?? null,
       })),
     });
   }

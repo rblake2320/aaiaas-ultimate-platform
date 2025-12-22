@@ -7,11 +7,13 @@ import { logger } from './utils/logger';
 import { connectRedis } from './config/redis';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { basicRateLimiter } from './middleware/rateLimiter';
+import { startWorkflowScheduler } from './services/workflowScheduler';
 
 // Routes
 import authRoutes from './routes/auth';
 import workflowRoutes from './routes/workflows';
 import apiKeyRoutes from './routes/apiKeys';
+import webhookRoutes from './routes/webhooks';
 
 const app = express();
 
@@ -23,7 +25,14 @@ app.use(cors({
 }));
 
 // Body parsing middleware
-app.use(express.json({ limit: '10mb' }));
+app.use(
+  express.json({
+    limit: '10mb',
+    verify: (req: any, _res, buf) => {
+      req.rawBody = buf;
+    },
+  })
+);
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Rate limiting
@@ -42,6 +51,7 @@ app.get('/health', (req, res) => {
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/workflows', workflowRoutes);
 app.use('/api/v1/api-keys', apiKeyRoutes);
+app.use('/api/v1/webhooks', webhookRoutes);
 
 // 404 handler
 app.use(notFoundHandler);
@@ -55,6 +65,10 @@ async function start() {
     // Connect to Redis
     await connectRedis();
     logger.info('Connected to Redis');
+
+    if (env.WORKFLOW_SCHEDULER_ENABLED) {
+      startWorkflowScheduler(parseInt(env.WORKFLOW_SCHEDULER_POLL_MS, 10));
+    }
 
     // Start HTTP server
     const PORT = parseInt(env.PORT);
