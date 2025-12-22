@@ -55,7 +55,7 @@ export class WorkflowEngine {
       organization_id: context.organizationId,
       user_id: context.userId,
       status: 'running',
-      input: JSON.stringify(input),
+      input: input || {},
       started_at: new Date(),
     });
 
@@ -74,7 +74,7 @@ export class WorkflowEngine {
         .where({ id: context.executionId })
         .update({
           status: 'completed',
-          output: JSON.stringify(result),
+          output: result ?? null,
           completed_at: new Date(),
         });
 
@@ -96,7 +96,7 @@ export class WorkflowEngine {
         .where({ id: context.executionId })
         .update({
           status: 'failed',
-          error: error.message,
+          error_message: error.message,
           completed_at: new Date(),
         });
 
@@ -326,12 +326,14 @@ export class WorkflowEngine {
   }
 
   private evaluateCondition(condition: string, variables: Record<string, any>): boolean {
-    // Simple condition evaluation
-    // In production, use a safe expression evaluator
+    // Safe condition evaluator:
+    // Supports: (), !, &&, ||, ==, !=, >, >=, <, <=
+    // Variables: {{foo}}, {{foo.bar}}, {{foo_bar}}
     try {
-      const interpolated = this.interpolateString(condition, variables);
-      return eval(interpolated);
-    } catch {
+      const parser = new ConditionParser(condition, variables);
+      return parser.parseExpression();
+    } catch (e) {
+      logger.warn('Condition evaluation failed', { condition, error: (e as Error)?.message });
       return false;
     }
   }
@@ -342,3 +344,268 @@ export class WorkflowEngine {
 }
 
 export const workflowEngine = new WorkflowEngine();
+
+type Token =
+  | { type: 'number'; value: number }
+  | { type: 'string'; value: string }
+  | { type: 'boolean'; value: boolean }
+  | { type: 'null' }
+  | { type: 'var'; path: string }
+  | { type: 'op'; value: '==' | '!=' | '>=' | '<=' | '>' | '<' | '&&' | '||' | '!' }
+  | { type: 'lparen' }
+  | { type: 'rparen' }
+  | { type: 'eof' };
+
+class ConditionParser {
+  private i = 0;
+  private tokens: Token[];
+
+  constructor(input: string, private variables: Record<string, any>) {
+    this.tokens = tokenizeCondition(input);
+  }
+
+  parseExpression(): boolean {
+    const v = this.parseOr();
+    this.expect('eof');
+    return Boolean(v);
+  }
+
+  private parseOr(): any {
+    let left = this.parseAnd();
+    while (this.peekIsOp('||')) {
+      this.next(); // ||
+      const right = this.parseAnd();
+      left = Boolean(left) || Boolean(right);
+    }
+    return left;
+  }
+
+  private parseAnd(): any {
+    let left = this.parseUnary();
+    while (this.peekIsOp('&&')) {
+      this.next(); // &&
+      const right = this.parseUnary();
+      left = Boolean(left) && Boolean(right);
+    }
+    return left;
+  }
+
+  private parseUnary(): any {
+    if (this.peekIsOp('!')) {
+      this.next();
+      return !Boolean(this.parseUnary());
+    }
+    return this.parseComparison();
+  }
+
+  private parseComparison(): any {
+    let left = this.parsePrimary();
+    const op = this.peek();
+    if (op.type === 'op' && ['==', '!=', '>=', '<=', '>', '<'].includes(op.value)) {
+      this.next();
+      const right = this.parsePrimary();
+      return compareValues(left, op.value, right);
+    }
+    return left;
+  }
+
+  private parsePrimary(): any {
+    const t = this.next();
+    switch (t.type) {
+      case 'number':
+      case 'string':
+      case 'boolean':
+        return t.value;
+      case 'null':
+        return null;
+      case 'var':
+        return getPath(this.variables, t.path);
+      case 'lparen': {
+        const v = this.parseOr();
+        this.expect('rparen');
+        return v;
+      }
+      default:
+        throw new Error(`Unexpected token: ${t.type}`);
+    }
+  }
+
+  private peek(): Token {
+    return this.tokens[this.i] || { type: 'eof' };
+  }
+
+  private next(): Token {
+    const t = this.peek();
+    this.i += 1;
+    return t;
+  }
+
+  private expect(type: Token['type']) {
+    const t = this.next();
+    if (t.type !== type) throw new Error(`Expected ${type}, got ${t.type}`);
+  }
+
+  private peekIsOp(value: Token extends { type: 'op' } ? never : any): boolean {
+    const t = this.peek();
+    return t.type === 'op' && t.value === value;
+  }
+}
+
+function tokenizeCondition(input: string): Token[] {
+  const tokens: Token[] = [];
+  let i = 0;
+
+  const isWs = (c: string) => /\s/.test(c);
+  const peek = () => input[i] || '';
+  const take = () => input[i++] || '';
+
+  while (i < input.length) {
+    const c = peek();
+    if (isWs(c)) {
+      i += 1;
+      continue;
+    }
+
+    // {{var}} or {{var.path}}
+    if (c === '{' && input[i + 1] === '{') {
+      i += 2;
+      let path = '';
+      while (i < input.length && !(input[i] === '}' && input[i + 1] === '}')) {
+        path += take();
+      }
+      if (!(input[i] === '}' && input[i + 1] === '}')) throw new Error('Unterminated {{ }}');
+      i += 2;
+      path = path.trim();
+      if (!/^[A-Za-z0-9_.]+$/.test(path)) throw new Error(`Invalid variable path: ${path}`);
+      tokens.push({ type: 'var', path });
+      continue;
+    }
+
+    // parentheses
+    if (c === '(') {
+      i += 1;
+      tokens.push({ type: 'lparen' });
+      continue;
+    }
+    if (c === ')') {
+      i += 1;
+      tokens.push({ type: 'rparen' });
+      continue;
+    }
+
+    // operators (2-char first)
+    const two = input.slice(i, i + 2);
+    if (two === '&&' || two === '||' || two === '==' || two === '!=' || two === '>=' || two === '<=') {
+      i += 2;
+      tokens.push({ type: 'op', value: two as any });
+      continue;
+    }
+    if (c === '!' || c === '>' || c === '<') {
+      i += 1;
+      tokens.push({ type: 'op', value: c as any });
+      continue;
+    }
+
+    // string literals
+    if (c === '"' || c === "'") {
+      const quote = take();
+      let s = '';
+      while (i < input.length) {
+        const ch = take();
+        if (ch === '\\') {
+          const esc = take();
+          s += esc;
+          continue;
+        }
+        if (ch === quote) break;
+        s += ch;
+      }
+      tokens.push({ type: 'string', value: s });
+      continue;
+    }
+
+    // number
+    if (/[0-9]/.test(c) || (c === '.' && /[0-9]/.test(input[i + 1] || ''))) {
+      let raw = '';
+      while (i < input.length && /[0-9.]/.test(peek())) raw += take();
+      const n = Number(raw);
+      if (!Number.isFinite(n)) throw new Error(`Invalid number: ${raw}`);
+      tokens.push({ type: 'number', value: n });
+      continue;
+    }
+
+    // keywords: true/false/null
+    if (/[A-Za-z]/.test(c)) {
+      let raw = '';
+      while (i < input.length && /[A-Za-z]/.test(peek())) raw += take();
+      if (raw === 'true') tokens.push({ type: 'boolean', value: true });
+      else if (raw === 'false') tokens.push({ type: 'boolean', value: false });
+      else if (raw === 'null') tokens.push({ type: 'null' });
+      else throw new Error(`Unknown identifier: ${raw}`);
+      continue;
+    }
+
+    throw new Error(`Unexpected character: ${c}`);
+  }
+
+  tokens.push({ type: 'eof' });
+  return tokens;
+}
+
+function getPath(obj: any, path: string): any {
+  const parts = path.split('.').filter(Boolean);
+  let cur = obj;
+  for (const p of parts) {
+    if (cur == null) return undefined;
+    cur = cur[p];
+  }
+  return cur;
+}
+
+function compareValues(left: any, op: '==' | '!=' | '>=' | '<=' | '>' | '<', right: any): boolean {
+  if (op === '==' || op === '!=') {
+    const eq = left === right;
+    return op === '==' ? eq : !eq;
+  }
+
+  // For ordering comparisons, prefer numeric if both look numeric
+  const ln = toComparableNumber(left);
+  const rn = toComparableNumber(right);
+  if (ln !== null && rn !== null) {
+    switch (op) {
+      case '>':
+        return ln > rn;
+      case '>=':
+        return ln >= rn;
+      case '<':
+        return ln < rn;
+      case '<=':
+        return ln <= rn;
+    }
+  }
+
+  // Otherwise, only compare strings to strings
+  if (typeof left === 'string' && typeof right === 'string') {
+    switch (op) {
+      case '>':
+        return left > right;
+      case '>=':
+        return left >= right;
+      case '<':
+        return left < right;
+      case '<=':
+        return left <= right;
+    }
+  }
+
+  return false;
+}
+
+function toComparableNumber(v: any): number | null {
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v === 'string' && v.trim() !== '') {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}

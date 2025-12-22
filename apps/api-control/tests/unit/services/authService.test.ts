@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, jest } from '@jest/globals';
 import bcrypt from 'bcrypt';
 import { db } from '../../../src/config/database';
 import * as jwt from '../../../src/utils/jwt';
+import { authService } from '../../../src/services/authService';
 
 // Mock dependencies
 jest.mock('../../../src/config/database');
@@ -24,20 +25,58 @@ describe('AuthService', () => {
         name: 'Test User',
       };
 
-      // Mock database insert
-      (db as any).mockReturnValue({
-        insert: jest.fn().mockReturnValue({
-          values: jest.fn().mockReturnValue({
-            returning: jest.fn().mockResolvedValue([{
-              id: 'user-123',
-              email: userData.email,
-              name: userData.name,
-            }]),
-          }),
-        }),
+      // Mock "existing user" lookup: none found
+      (db as unknown as jest.Mock).mockImplementation((table: string) => {
+        if (table === 'users') {
+          return {
+            where: jest.fn().mockReturnValue({
+              first: jest.fn().mockResolvedValue(null),
+            }),
+          };
+        }
+        if (table === 'refresh_tokens') {
+          return {
+            insert: jest.fn().mockResolvedValue(undefined),
+          };
+        }
+        return {};
       });
 
-      expect(bcrypt.hash).toHaveBeenCalledWith(userData.password, 10);
+      // Mock transaction for user/org creation
+      (db as any).transaction = jest.fn().mockImplementation(async (cb: any) => {
+        const trx = (table: string) => {
+          if (table === 'users') {
+            return {
+              insert: jest.fn().mockReturnValue({
+                returning: jest.fn().mockResolvedValue([
+                  { id: 'user-123', email: userData.email, name: userData.name },
+                ]),
+              }),
+            };
+          }
+          if (table === 'organization_members') {
+            return { insert: jest.fn().mockResolvedValue(undefined) };
+          }
+          if (table === 'organizations') {
+            return {
+              insert: jest.fn().mockReturnValue({
+                returning: jest.fn().mockResolvedValue([
+                  { id: 'org-123', name: 'Org', slug: 'org', plan: 'free' },
+                ]),
+              }),
+            };
+          }
+          return {};
+        };
+        return cb(trx);
+      });
+
+      (jwt.generateAccessToken as jest.Mock).mockReturnValue('access_token');
+      (jwt.generateRefreshToken as jest.Mock).mockReturnValue('refresh_token');
+
+      await authService.register({ ...userData, organizationName: 'Org' });
+
+      expect(bcrypt.hash).toHaveBeenCalledWith(userData.password, 12);
     });
 
     it('should reject weak passwords', async () => {
@@ -49,13 +88,15 @@ describe('AuthService', () => {
       ];
 
       for (const password of weakPasswords) {
-        await expect(async () => {
-          // This would call the actual service
-          // For now, we're just testing the concept
-          if (password.length < 8) {
-            throw new Error('Password must be at least 8 characters');
-          }
-        }).rejects.toThrow();
+        await expect(
+          authService.register({
+            email: 'weak@example.com',
+            password,
+            name: 'Weak User',
+          })
+        ).rejects.toThrow(
+          'Password must be at least 8 characters and include uppercase, lowercase, number, and special character'
+        );
       }
     });
 

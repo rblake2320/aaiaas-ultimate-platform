@@ -30,6 +30,9 @@ export async function authenticate(
     }
 
     const [type, token] = authHeader.split(' ');
+    if (!type || !token) {
+      return res.status(401).json({ error: 'Invalid authorization header format' });
+    }
 
     if (type === 'Bearer') {
       // JWT token authentication
@@ -70,6 +73,10 @@ export async function authenticate(
       const organization = await db('organizations')
         .where({ id: apiKey.organization_id })
         .first();
+
+      if (!organization) {
+        return res.status(401).json({ error: 'Invalid API key' });
+      }
 
       req.organization = {
         id: organization.id,

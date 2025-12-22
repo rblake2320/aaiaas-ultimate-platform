@@ -40,14 +40,13 @@ export class ApiKeyService {
     await db('api_keys').insert({
       id,
       organization_id: input.organizationId,
-      user_id: input.userId,
       name: input.name,
       key_hash: hashedKey,
       key_prefix: apiKey.substring(0, 10),
-      scopes: JSON.stringify(input.scopes || ['*']),
-      rate_limit: input.rateLimit || 1000,
+      permissions: input.scopes || ['*'],
       expires_at: input.expiresAt,
       last_used_at: null,
+      is_active: true,
     });
 
     logger.info('API key created', {
@@ -67,7 +66,7 @@ export class ApiKeyService {
     const hashedKey = this.hashApiKey(apiKey);
 
     const key = await db('api_keys')
-      .where({ key_hash: hashedKey, revoked: false })
+      .where({ key_hash: hashedKey, is_active: true })
       .first();
 
     if (!key) {
@@ -92,9 +91,7 @@ export class ApiKeyService {
     return {
       id: key.id,
       organizationId: key.organization_id,
-      userId: key.user_id,
-      scopes: JSON.parse(key.scopes),
-      rateLimit: key.rate_limit,
+      scopes: key.permissions || ['*'],
       organization,
     };
   }
@@ -111,9 +108,8 @@ export class ApiKeyService {
       id: key.id,
       name: key.name,
       keyPrefix: key.key_prefix,
-      scopes: JSON.parse(key.scopes),
-      rateLimit: key.rate_limit,
-      revoked: key.revoked,
+      scopes: key.permissions || ['*'],
+      revoked: !key.is_active,
       expiresAt: key.expires_at,
       lastUsedAt: key.last_used_at,
       createdAt: key.created_at,
@@ -136,9 +132,8 @@ export class ApiKeyService {
       id: key.id,
       name: key.name,
       keyPrefix: key.key_prefix,
-      scopes: JSON.parse(key.scopes),
-      rateLimit: key.rate_limit,
-      revoked: key.revoked,
+      scopes: key.permissions || ['*'],
+      revoked: !key.is_active,
       expiresAt: key.expires_at,
       lastUsedAt: key.last_used_at,
       createdAt: key.created_at,
@@ -151,7 +146,7 @@ export class ApiKeyService {
   async revokeApiKey(id: string, organizationId: string): Promise<void> {
     await db('api_keys')
       .where({ id, organization_id: organizationId })
-      .update({ revoked: true, updated_at: new Date() });
+      .update({ is_active: false, updated_at: new Date() });
 
     logger.info('API key revoked', { keyId: id, organizationId });
   }
@@ -178,8 +173,7 @@ export class ApiKeyService {
     const updateData: any = { updated_at: new Date() };
 
     if (updates.name) updateData.name = updates.name;
-    if (updates.scopes) updateData.scopes = JSON.stringify(updates.scopes);
-    if (updates.rateLimit) updateData.rate_limit = updates.rateLimit;
+    if (updates.scopes) updateData.permissions = updates.scopes;
 
     await db('api_keys')
       .where({ id, organization_id: organizationId })
@@ -202,7 +196,7 @@ export class ApiKeyService {
     // For now, just return the configured limit
     return {
       allowed: true,
-      remaining: key.rate_limit,
+      remaining: Number.POSITIVE_INFINITY,
     };
   }
 }
