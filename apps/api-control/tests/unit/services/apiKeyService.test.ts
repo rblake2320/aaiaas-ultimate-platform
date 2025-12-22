@@ -91,7 +91,7 @@ describe('APIKeyService', () => {
       const keyId = 'key-123';
       
       // Mock would update the database
-      const mockUpdate = jest.fn().mockResolvedValue({ revoked: true });
+      const mockUpdate = (jest.fn() as any).mockResolvedValue({ revoked: true });
       
       await mockUpdate();
       expect(mockUpdate).toHaveBeenCalled();

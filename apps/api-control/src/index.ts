@@ -12,6 +12,7 @@ import { basicRateLimiter } from './middleware/rateLimiter';
 import authRoutes from './routes/auth';
 import workflowRoutes from './routes/workflows';
 import apiKeyRoutes from './routes/apiKeys';
+import githubRoutes from './routes/github';
 
 const app = express();
 
@@ -42,6 +43,7 @@ app.get('/health', (req, res) => {
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/workflows', workflowRoutes);
 app.use('/api/v1/api-keys', apiKeyRoutes);
+app.use('/api/v1/github', githubRoutes);
 
 // 404 handler
 app.use(notFoundHandler);
