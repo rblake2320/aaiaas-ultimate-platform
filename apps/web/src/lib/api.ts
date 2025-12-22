@@ -2,10 +2,13 @@ import axios, { AxiosInstance, AxiosError } from 'axios';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 const AI_API_URL = process.env.NEXT_PUBLIC_AI_API_URL || 'http://localhost:5000';
+const COMMAND_CENTER_API_URL =
+  process.env.NEXT_PUBLIC_COMMAND_CENTER_API_URL || 'http://localhost:4100';
 
 class ApiClient {
   private client: AxiosInstance;
   private aiClient: AxiosInstance;
+  private commandCenterClient: AxiosInstance;
 
   constructor() {
     this.client = axios.create({
@@ -22,6 +25,13 @@ class ApiClient {
       },
     });
 
+    this.commandCenterClient = axios.create({
+      baseURL: COMMAND_CENTER_API_URL,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
     // Request interceptor to add auth token
     this.client.interceptors.request.use((config) => {
       const token = this.getToken();
@@ -32,6 +42,14 @@ class ApiClient {
     });
 
     this.aiClient.interceptors.request.use((config) => {
+      const token = this.getToken();
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+      return config;
+    });
+
+    this.commandCenterClient.interceptors.request.use((config) => {
       const token = this.getToken();
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
@@ -162,6 +180,26 @@ class ApiClient {
 
   async aiHealthCheck() {
     const response = await this.aiClient.get('/health');
+    return response.data;
+  }
+
+  // Command Center endpoints
+  async listCommandCenterRepos() {
+    const response = await this.commandCenterClient.get('/api/v1/command-center/repos');
+    return response.data;
+  }
+
+  async registerCommandCenterRepo(data: {
+    name: string;
+    orchestratorBaseUrl: string;
+    apiKey?: string;
+  }) {
+    const response = await this.commandCenterClient.post('/api/v1/command-center/repos', data);
+    return response.data;
+  }
+
+  async listCommandCenterRuns(params?: { status?: string; limitPerRepo?: number }) {
+    const response = await this.commandCenterClient.get('/api/v1/command-center/runs', { params });
     return response.data;
   }
 }

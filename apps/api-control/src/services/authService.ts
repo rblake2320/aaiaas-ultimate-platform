@@ -11,6 +11,16 @@ import { v4 as uuidv4 } from 'uuid';
 
 const SALT_ROUNDS = 12;
 
+function isStrongPassword(password: string) {
+  // Min 8 chars, and include upper/lower/number/special.
+  if (password.length < 8) return false;
+  if (!/[a-z]/.test(password)) return false;
+  if (!/[A-Z]/.test(password)) return false;
+  if (!/[0-9]/.test(password)) return false;
+  if (!/[^A-Za-z0-9]/.test(password)) return false;
+  return true;
+}
+
 export interface RegisterInput {
   email: string;
   password: string;
@@ -25,6 +35,13 @@ export interface LoginInput {
 
 export class AuthService {
   async register(input: RegisterInput) {
+    if (!isStrongPassword(input.password)) {
+      throw new AppError(
+        400,
+        'Password too weak (min 8 chars, include upper/lower/number/special)'
+      );
+    }
+
     // Check if user already exists
     const existingUser = await db('users').where({ email: input.email }).first();
 

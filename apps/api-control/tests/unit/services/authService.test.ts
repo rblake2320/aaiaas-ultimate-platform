@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, jest } from '@jest/globals';
 import bcrypt from 'bcrypt';
 import { db } from '../../../src/config/database';
 import * as jwt from '../../../src/utils/jwt';
+import { AuthService } from '../../../src/services/authService';
 
 // Mock dependencies
 jest.mock('../../../src/config/database');
@@ -9,6 +10,8 @@ jest.mock('bcrypt');
 jest.mock('../../../src/utils/jwt');
 
 describe('AuthService', () => {
+  const service = new AuthService();
+
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -24,20 +27,56 @@ describe('AuthService', () => {
         name: 'Test User',
       };
 
-      // Mock database insert
-      (db as any).mockReturnValue({
-        insert: jest.fn().mockReturnValue({
-          values: jest.fn().mockReturnValue({
-            returning: jest.fn().mockResolvedValue([{
-              id: 'user-123',
-              email: userData.email,
-              name: userData.name,
-            }]),
-          }),
-        }),
+      // Mock token helpers used by AuthService.register
+      (jwt.generateAccessToken as jest.Mock).mockReturnValue('access_token');
+      (jwt.generateRefreshToken as jest.Mock).mockReturnValue('refresh_token');
+      (jwt.hashToken as jest.Mock).mockReturnValue('refresh_token_hash');
+
+      // Mock Knex-style db calls used by AuthService.register
+      const dbFn = db as any as jest.Mock;
+
+      const existingUserFirst = jest.fn().mockResolvedValue(null);
+      const refreshTokensInsert = jest.fn().mockResolvedValue(undefined);
+
+      dbFn.mockImplementation((table: string) => {
+        if (table === 'users') {
+          return {
+            where: jest.fn().mockReturnThis(),
+            first: existingUserFirst,
+          };
+        }
+        if (table === 'refresh_tokens') {
+          return {
+            insert: refreshTokensInsert,
+            where: jest.fn().mockReturnThis(),
+            update: jest.fn().mockResolvedValue(1),
+          };
+        }
+        return {};
       });
 
-      expect(bcrypt.hash).toHaveBeenCalledWith(userData.password, 10);
+      const trxFn = jest.fn((table: string) => {
+        if (table === 'users') {
+          return {
+            insert: jest.fn().mockReturnValue({
+              returning: jest.fn().mockResolvedValue([
+                {
+                  id: 'user-123',
+                  email: userData.email,
+                  name: userData.name,
+                },
+              ]),
+            }),
+          };
+        }
+        return {};
+      });
+
+      dbFn.transaction = jest.fn(async (cb: any) => cb(trxFn));
+
+      await service.register(userData);
+
+      expect(bcrypt.hash).toHaveBeenCalledWith(userData.password, 12);
     });
 
     it('should reject weak passwords', async () => {
@@ -49,13 +88,13 @@ describe('AuthService', () => {
       ];
 
       for (const password of weakPasswords) {
-        await expect(async () => {
-          // This would call the actual service
-          // For now, we're just testing the concept
-          if (password.length < 8) {
-            throw new Error('Password must be at least 8 characters');
-          }
-        }).rejects.toThrow();
+        await expect(
+          service.register({
+            email: 'weak@example.com',
+            password,
+            name: 'Weak Password User',
+          })
+        ).rejects.toThrow();
       }
     });
 

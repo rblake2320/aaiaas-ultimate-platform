@@ -7,24 +7,9 @@ module.exports = {
   transform: {
     '^.+\\.ts$': 'ts-jest',
   },
-  globals: {
-    'ts-jest': {
-      // Keep tests fast and avoid failing on TypeScript-only typing issues in mocks.
-      isolatedModules: true,
-      diagnostics: false,
-    },
-  },
-  collectCoverageFrom: [
-    'src/**/*.ts',
-    '!src/**/*.d.ts',
-    '!src/**/*.interface.ts',
-    '!src/index.ts',
-  ],
+  collectCoverageFrom: ['src/**/*.ts', '!src/**/*.d.ts', '!src/index.ts'],
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
-  moduleNameMapper: {
-    '^@/(.*)$': '<rootDir>/src/$1',
-  },
   setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
   testTimeout: 10000,
   verbose: true,

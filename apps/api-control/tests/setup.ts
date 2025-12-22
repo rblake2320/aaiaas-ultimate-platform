@@ -7,6 +7,12 @@ config({ path: '.env.test' });
 // Set test environment
 process.env.NODE_ENV = 'test';
 
+// Provide required env vars with safe defaults for unit tests
+process.env.DATABASE_URL =
+  process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@localhost:5432/aaiaas_test';
+process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'x'.repeat(32);
+process.env.REFRESH_TOKEN_SECRET = process.env.REFRESH_TOKEN_SECRET ?? 'y'.repeat(32);
+
 // Mock console methods to reduce noise in tests
 global.console = {
   ...console,
