@@ -60,6 +60,9 @@ Thumbs.db
 uploads/
 temp/
 
+# Codebase monitor outputs
+reports/
+
 
 # TypeScript build artifacts
 *.tsbuildinfo
