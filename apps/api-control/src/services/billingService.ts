@@ -156,7 +156,7 @@ export class BillingService {
   async createSubscription(
     organizationId: string,
     plan: string,
-    paymentMethodId?: string
+    _paymentMethodId?: string
   ): Promise<any> {
     const billingPlan = BILLING_PLANS[plan];
     if (!billingPlan) {
@@ -223,12 +223,7 @@ export class BillingService {
     const startOfMonth = new Date(month.getFullYear(), month.getMonth(), 1);
     const endOfMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0, 23, 59, 59);
 
-    const usage = await usageService.getUsageStats(
-      organizationId,
-      'api_calls',
-      startOfMonth,
-      endOfMonth
-    );
+    await usageService.getUsageStats(organizationId, 'api_calls', startOfMonth, endOfMonth);
 
     const allUsage = await usageService.getCurrentMonthUsage(organizationId);
     const cost = usageService.calculateCost(allUsage);

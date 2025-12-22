@@ -57,8 +57,6 @@ export class AuthController {
   }
 
   async me(req: any, res: Response) {
-    const userId = req.user.id;
-
     // This would typically fetch full user profile
     // For now, return what we have from the token
     res.json({

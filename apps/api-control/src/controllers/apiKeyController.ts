@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import { z } from 'zod';
 import { apiKeyService } from '../services/apiKeyService';
 import { logger } from '../utils/logger';
