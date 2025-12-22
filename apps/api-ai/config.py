@@ -4,7 +4,9 @@ Configuration and environment validation for AI Services API
 
 import os
 from typing import Optional
-from pydantic import BaseSettings, Field, validator
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import field_validator
 
 
 class Settings(BaseSettings):
@@ -60,8 +62,9 @@ class Settings(BaseSettings):
     # Logging
     log_level: str = Field(default="INFO", env="LOG_LEVEL")
     
-    @validator("openai_api_key")
-    def validate_openai_key(cls, v):
+    @field_validator("openai_api_key")
+    @classmethod
+    def validate_openai_key(cls, v: str) -> str:
         """Validate OpenAI API key format"""
         if not v or v.startswith("your-") or v.startswith("sk-your"):
             raise ValueError(
@@ -72,8 +75,9 @@ class Settings(BaseSettings):
             raise ValueError("OpenAI API key must start with 'sk-'")
         return v
     
-    @validator("database_url")
-    def validate_database_url(cls, v):
+    @field_validator("database_url")
+    @classmethod
+    def validate_database_url(cls, v: str) -> str:
         """Validate database URL format"""
         if not v or "your-" in v or "localhost" not in v and "example" in v:
             raise ValueError(
@@ -84,25 +88,28 @@ class Settings(BaseSettings):
             raise ValueError("DATABASE_URL must start with 'postgresql://' or 'postgres://'")
         return v
     
-    @validator("environment")
-    def validate_environment(cls, v):
+    @field_validator("environment")
+    @classmethod
+    def validate_environment(cls, v: str) -> str:
         """Validate environment value"""
         valid_envs = ["development", "staging", "production", "test"]
         if v not in valid_envs:
             raise ValueError(f"Environment must be one of: {', '.join(valid_envs)}")
         return v
     
-    @validator("allowed_origins")
+    @field_validator("allowed_origins", mode="before")
+    @classmethod
     def validate_origins(cls, v):
         """Parse CORS origins from environment"""
         if isinstance(v, str):
             return [origin.strip() for origin in v.split(",")]
         return v
     
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+    )
 
 
 # Global settings instance

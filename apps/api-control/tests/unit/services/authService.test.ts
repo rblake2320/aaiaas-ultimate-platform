@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, jest } from '@jest/globals';
 import bcrypt from 'bcrypt';
 import { db } from '../../../src/config/database';
 import * as jwt from '../../../src/utils/jwt';
+import { authService } from '../../../src/services/authService';
+import { AppError } from '../../../src/middleware/errorHandler';
 
 // Mock dependencies
 jest.mock('../../../src/config/database');
@@ -14,9 +16,12 @@ describe('AuthService', () => {
   });
 
   describe('registerUser', () => {
-    it('should hash password before storing', async () => {
+    it('should hash password and store user', async () => {
       const mockHashedPassword = 'hashed_password_123';
-      (bcrypt.hash as jest.Mock).mockResolvedValue(mockHashedPassword);
+      (bcrypt.hash as unknown as jest.Mock).mockResolvedValue(mockHashedPassword);
+      (jwt.generateAccessToken as unknown as jest.Mock).mockReturnValue('access_token');
+      (jwt.generateRefreshToken as unknown as jest.Mock).mockReturnValue('refresh_token');
+      (jwt.hashToken as unknown as jest.Mock).mockReturnValue('refresh_hash');
 
       const userData = {
         email: 'test@example.com',
@@ -24,54 +29,93 @@ describe('AuthService', () => {
         name: 'Test User',
       };
 
-      // Mock database insert
-      (db as any).mockReturnValue({
-        insert: jest.fn().mockReturnValue({
-          values: jest.fn().mockReturnValue({
-            returning: jest.fn().mockResolvedValue([{
-              id: 'user-123',
-              email: userData.email,
-              name: userData.name,
-            }]),
-          }),
-        }),
+      const createdUserRow = {
+        id: 'user-123',
+        email: userData.email,
+        name: userData.name,
+        password_hash: mockHashedPassword,
+        status: 'active',
+      };
+
+      const dbMock = db as unknown as jest.Mock & { transaction?: jest.Mock };
+
+      // First: "does user exist?"
+      dbMock.mockImplementation((table: string) => {
+        if (table === 'users') {
+          return {
+            where: jest.fn().mockReturnValue({
+              first: jest.fn().mockResolvedValue(null),
+            }),
+          };
+        }
+        if (table === 'refresh_tokens') {
+          return {
+            insert: jest.fn().mockResolvedValue(undefined),
+          };
+        }
+        return {};
       });
 
-      expect(bcrypt.hash).toHaveBeenCalledWith(userData.password, 10);
-    });
-
-    it('should reject weak passwords', async () => {
-      const weakPasswords = [
-        'short',
-        'nouppercaseorspecial123',
-        'NoSpecialChar123',
-        'NoNumber!',
-      ];
-
-      for (const password of weakPasswords) {
-        await expect(async () => {
-          // This would call the actual service
-          // For now, we're just testing the concept
-          if (password.length < 8) {
-            throw new Error('Password must be at least 8 characters');
+      // Transaction path (user creation)
+      dbMock.transaction = jest.fn(async (cb: any) => {
+        const trx = (table: string) => {
+          if (table === 'users') {
+            return {
+              insert: jest.fn().mockReturnValue({
+                returning: jest.fn().mockResolvedValue([createdUserRow]),
+              }),
+            };
           }
-        }).rejects.toThrow();
-      }
+          return {
+            insert: jest.fn().mockResolvedValue(undefined),
+            returning: jest.fn().mockResolvedValue([]),
+          };
+        };
+        return cb(trx);
+      });
+
+      const result = await authService.register(userData);
+
+      // AuthService uses SALT_ROUNDS = 12
+      expect(bcrypt.hash).toHaveBeenCalledWith(userData.password, 12);
+      expect(result.user).toEqual({
+        id: createdUserRow.id,
+        email: createdUserRow.email,
+        name: createdUserRow.name,
+      });
+      expect(result.accessToken).toBe('access_token');
+      expect(result.refreshToken).toBe('refresh_token');
     });
 
     it('should prevent duplicate email registration', async () => {
-      const existingEmail = 'existing@example.com';
+      const existingUser = { id: 'user-existing', email: 'existing@example.com' };
+      const dbMock = db as unknown as jest.Mock;
 
-      (db as any).mockReturnValue({
-        select: jest.fn().mockReturnValue({
-          from: jest.fn().mockReturnValue({
-            where: jest.fn().mockResolvedValue([{ email: existingEmail }]),
-          }),
-        }),
+      dbMock.mockImplementation((table: string) => {
+        if (table === 'users') {
+          return {
+            where: jest.fn().mockReturnValue({
+              first: jest.fn().mockResolvedValue(existingUser),
+            }),
+          };
+        }
+        return {};
       });
 
-      // Test would verify duplicate email is rejected
-      expect(true).toBe(true); // Placeholder
+      await expect(
+        authService.register({
+          email: existingUser.email,
+          password: 'SecurePassword123!',
+          name: 'Test User',
+        })
+      ).rejects.toBeInstanceOf(AppError);
+      await expect(
+        authService.register({
+          email: existingUser.email,
+          password: 'SecurePassword123!',
+          name: 'Test User',
+        })
+      ).rejects.toMatchObject({ statusCode: 409 });
     });
   });
 
