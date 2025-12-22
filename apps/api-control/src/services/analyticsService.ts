@@ -1,5 +1,4 @@
 import { db } from '../config/database';
-import { logger } from '../utils/logger';
 
 export interface AnalyticsMetrics {
   overview: {
@@ -167,7 +166,7 @@ export class AnalyticsService {
   /**
    * Get performance metrics
    */
-  async getPerformanceMetrics(organizationId: string): Promise<any> {
+  async getPerformanceMetrics(_organizationId: string): Promise<any> {
     // In production, track response times, error rates, etc.
     // For now, return mock data
     return {

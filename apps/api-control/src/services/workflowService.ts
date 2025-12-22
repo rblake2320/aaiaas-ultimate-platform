@@ -150,7 +150,7 @@ export class WorkflowEngine {
   }
 
   private async executeTrigger(
-    node: WorkflowNode,
+    _node: WorkflowNode,
     context: WorkflowContext
   ): Promise<any> {
     // Trigger nodes just pass through the input
