@@ -123,6 +123,39 @@ curl -X POST http://localhost:4000/api/v1/auth/logout \
 }
 ```
 
+## GitHub Integration
+
+### List ALL GitHub Repos for a User
+
+This endpoint is protected by the Control API auth (JWT or ApiKey) and requires a GitHub access token (PAT or OAuth token) in `X-GitHub-Token`.
+
+```bash
+curl -X GET "http://localhost:4000/api/v1/github/repos?visibility=all&sort=updated&direction=desc" \
+  -H "Authorization: Bearer YOUR_CONTROL_PLANE_JWT" \
+  -H "X-GitHub-Token: ghp_your_github_token_here"
+```
+
+**Response:**
+```json
+{
+  "total": 2,
+  "repos": [
+    {
+      "id": 123,
+      "name": "repo-one",
+      "fullName": "me/repo-one",
+      "private": false,
+      "htmlUrl": "https://github.com/me/repo-one",
+      "defaultBranch": "main",
+      "archived": false,
+      "fork": false,
+      "updatedAt": "2025-01-01T00:00:00Z",
+      "ownerLogin": "me"
+    }
+  ]
+}
+```
+
 ## AI Services Endpoints
 
 ### Chat Completion
