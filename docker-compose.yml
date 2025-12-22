@@ -1,9 +1,22 @@
 version: '3.9'
 
 services:
+  autoheal:
+    image: willfarrell/autoheal:1.2.0
+    container_name: aaiaas-autoheal
+    restart: unless-stopped
+    environment:
+      AUTOHEAL_INTERVAL: 10
+      AUTOHEAL_START_PERIOD: 60
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
   postgres:
     image: postgres:16-alpine
     container_name: aaiaas-postgres
+    restart: unless-stopped
+    labels:
+      - autoheal=true
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -22,6 +35,9 @@ services:
   redis:
     image: redis:7-alpine
     container_name: aaiaas-redis
+    restart: unless-stopped
+    labels:
+      - autoheal=true
     ports:
       - "6379:6379"
     volumes:
@@ -35,6 +51,9 @@ services:
   meilisearch:
     image: getmeilisearch/meilisearch:v1.7
     container_name: aaiaas-meilisearch
+    restart: unless-stopped
+    labels:
+      - autoheal=true
     environment:
       MEILI_ENV: development
       MEILI_MASTER_KEY: masterKey
@@ -46,9 +65,102 @@ services:
   mailhog:
     image: mailhog/mailhog:latest
     container_name: aaiaas-mailhog
+    restart: unless-stopped
+    labels:
+      - autoheal=true
     ports:
       - "1025:1025"  # SMTP
       - "8025:8025"  # Web UI
+
+  api-control:
+    profiles: ["app"]
+    build:
+      context: ./apps/api-control
+    container_name: aaiaas-api-control
+    restart: unless-stopped
+    labels:
+      - autoheal=true
+    ports:
+      - "4000:4000"
+    environment:
+      NODE_ENV: production
+      PORT: "4000"
+      DATABASE_URL: ${DATABASE_URL_DOCKER:-postgresql://postgres:postgres@postgres:5432/aaiaas}
+      REDIS_URL: ${REDIS_URL_DOCKER:-redis://redis:6379}
+      JWT_SECRET: ${JWT_SECRET:-EXAMPLE_ONLY_REPLACE_WITH_STRONG_RANDOM_SECRET_MIN_32_CHARS}
+      REFRESH_TOKEN_SECRET: ${REFRESH_TOKEN_SECRET:-EXAMPLE_ONLY_REPLACE_WITH_DIFFERENT_STRONG_RANDOM_SECRET_MIN_32_CHARS}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      RATE_LIMIT_WINDOW: ${RATE_LIMIT_WINDOW:-60}
+      RATE_LIMIT_MAX_REQUESTS: ${RATE_LIMIT_MAX_REQUESTS:-100}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:4000/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 20s
+
+  api-ai:
+    profiles: ["app"]
+    build:
+      context: ./apps/api-ai
+    container_name: aaiaas-api-ai
+    restart: unless-stopped
+    labels:
+      - autoheal=true
+    ports:
+      - "5000:5000"
+    environment:
+      PORT: "5000"
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      REDIS_URL: ${REDIS_URL_DOCKER:-redis://redis:6379}
+      DATABASE_URL: ${DATABASE_URL_DOCKER:-postgresql://postgres:postgres@postgres:5432/aaiaas}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=2).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  web:
+    profiles: ["app"]
+    build:
+      context: ./apps/web
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
+        NEXT_PUBLIC_AI_API_URL: ${NEXT_PUBLIC_AI_API_URL:-http://localhost:5000}
+    container_name: aaiaas-web
+    restart: unless-stopped
+    labels:
+      - autoheal=true
+    ports:
+      - "3000:3000"
+    depends_on:
+      api-control:
+        condition: service_healthy
+      api-ai:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:3000/api/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
 volumes:
   postgres_data:

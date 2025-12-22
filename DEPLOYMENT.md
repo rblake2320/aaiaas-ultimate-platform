@@ -68,6 +68,21 @@ This starts:
 - Meilisearch on port 7700
 - MailHog on ports 1025 (SMTP) and 8025 (UI)
 
+#### Full Stack (Docker Compose)
+
+To run **web + both APIs** in containers (with healthchecks + automatic restart):
+
+```bash
+docker-compose --profile app up -d --build
+```
+
+Notes:
+- The APIs expose health endpoints:
+  - Control API: `GET /health` (port 4000)
+  - AI API: `GET /health` (port 5000)
+  - Web: `GET /api/health` (port 3000)
+- Docker restart policies handle crashes, and an AutoHeal sidecar restarts containers that become **unhealthy**.
+
 #### Option B: Manual Installation
 
 Install and start PostgreSQL and Redis manually on your system.
