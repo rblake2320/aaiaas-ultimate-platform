@@ -25,6 +25,21 @@ export interface LoginInput {
 
 export class AuthService {
   async register(input: RegisterInput) {
+    // Basic password policy
+    // (Keeps requirements explicit and avoids storing weak credentials.)
+    const password = input.password || '';
+    const hasMinLength = password.length >= 8;
+    const hasLower = /[a-z]/.test(password);
+    const hasUpper = /[A-Z]/.test(password);
+    const hasNumber = /[0-9]/.test(password);
+    const hasSpecial = /[^A-Za-z0-9]/.test(password);
+    if (!(hasMinLength && hasLower && hasUpper && hasNumber && hasSpecial)) {
+      throw new AppError(
+        400,
+        'Password must be at least 8 characters and include uppercase, lowercase, number, and special character'
+      );
+    }
+
     // Check if user already exists
     const existingUser = await db('users').where({ email: input.email }).first();
 

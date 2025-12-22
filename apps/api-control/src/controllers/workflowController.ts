@@ -4,6 +4,7 @@ import { db } from '../config/database';
 import { workflowEngine, WorkflowDefinition } from '../services/workflowService';
 import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
+import { normalizeJsonb } from '../utils/json';
 
 const workflowSchema = z.object({
   name: z.string().min(1),
@@ -35,10 +36,10 @@ export class WorkflowController {
       created_by: userId,
       name: input.name,
       description: input.description,
-      definition: JSON.stringify({
+      definition: {
         nodes: input.nodes,
         variables: input.variables,
-      }),
+      },
       status: 'active',
     });
 
@@ -90,7 +91,7 @@ export class WorkflowController {
       id: workflow.id,
       name: workflow.name,
       description: workflow.description,
-      definition: JSON.parse(workflow.definition),
+      definition: normalizeJsonb(workflow.definition),
       status: workflow.status,
       createdAt: workflow.created_at,
       updatedAt: workflow.updated_at,
@@ -117,11 +118,11 @@ export class WorkflowController {
     if (input.name) updates.name = input.name;
     if (input.description !== undefined) updates.description = input.description;
     if (input.nodes || input.variables) {
-      const currentDef = JSON.parse(workflow.definition);
-      updates.definition = JSON.stringify({
+      const currentDef = normalizeJsonb<any>(workflow.definition) || {};
+      updates.definition = {
         nodes: input.nodes || currentDef.nodes,
         variables: input.variables || currentDef.variables,
-      });
+      };
     }
 
     await db('workflows').where({ id }).update(updates);
@@ -180,7 +181,7 @@ export class WorkflowController {
       id: workflow.id,
       name: workflow.name,
       description: workflow.description,
-      ...JSON.parse(workflow.definition),
+      ...(normalizeJsonb<any>(workflow.definition) || {}),
     };
 
     const executionId = uuidv4();
@@ -226,9 +227,9 @@ export class WorkflowController {
       id: execution.id,
       workflowId: execution.workflow_id,
       status: execution.status,
-      input: execution.input ? JSON.parse(execution.input) : null,
-      output: execution.output ? JSON.parse(execution.output) : null,
-      error: execution.error,
+      input: normalizeJsonb(execution.input),
+      output: normalizeJsonb(execution.output),
+      error: execution.error_message || null,
       startedAt: execution.started_at,
       completedAt: execution.completed_at,
     });

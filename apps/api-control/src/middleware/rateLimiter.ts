@@ -2,6 +2,7 @@ import rateLimit from 'express-rate-limit';
 import { redisClient } from '../config/redis';
 import { env } from '../config/env';
 import { Request, Response } from 'express';
+import { logger } from '../utils/logger';
 
 // Basic rate limiter using express-rate-limit
 export const basicRateLimiter = rateLimit({
@@ -33,12 +34,8 @@ export async function redisRateLimiter(
 
     if (currentCount >= maxRequests) {
       // Get the oldest request timestamp to calculate reset time
-      const oldestRequests = await redisClient.zRange(redisKey, 0, 0, {
-        REV: false,
-      });
-      const oldestTimestamp = oldestRequests.length > 0 
-        ? parseInt(oldestRequests[0]) 
-        : now;
+      const oldest = await redisClient.zRangeWithScores(redisKey, 0, 0);
+      const oldestTimestamp = oldest.length > 0 ? oldest[0].score : now;
       const resetAt = oldestTimestamp + windowSeconds * 1000;
 
       return {
@@ -64,7 +61,7 @@ export async function redisRateLimiter(
     };
   } catch (error) {
     // If Redis fails, allow the request (fail open)
-    console.error('Rate limiter error:', error);
+    logger.error('Rate limiter error', { error });
     return {
       allowed: true,
       remaining: maxRequests,

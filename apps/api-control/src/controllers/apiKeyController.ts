@@ -6,14 +6,12 @@ import { logger } from '../utils/logger';
 const createApiKeySchema = z.object({
   name: z.string().min(1),
   scopes: z.array(z.string()).optional(),
-  rateLimit: z.number().positive().optional(),
   expiresAt: z.string().datetime().optional(),
 });
 
 const updateApiKeySchema = z.object({
   name: z.string().min(1).optional(),
   scopes: z.array(z.string()).optional(),
-  rateLimit: z.number().positive().optional(),
 });
 
 export class ApiKeyController {
@@ -27,7 +25,6 @@ export class ApiKeyController {
       organizationId,
       userId,
       scopes: input.scopes,
-      rateLimit: input.rateLimit,
       expiresAt: input.expiresAt ? new Date(input.expiresAt) : undefined,
     });
 
