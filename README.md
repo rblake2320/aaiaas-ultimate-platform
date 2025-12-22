@@ -119,9 +119,24 @@ cd apps/web && npm run dev
 # Control Plane API only
 cd apps/api-control && npm run dev
 
+# Always-running background agents (workflow runner, webhook delivery)
+cd apps/api-control && npm run agents:dev
+
 # AI Services API only
 cd apps/api-ai && python -m uvicorn main:app --reload
 ```
+
+### Always-running Agents
+
+The Control Plane includes an always-running agent runner (`apps/api-control/src/agentsRunner.ts`) that provides:
+
+- Workflow run processing (drains `workflow_runs` with `status='pending'`)
+- Webhook delivery retries (drains `webhook_deliveries` where `delivered_at IS NULL`)
+- Heartbeat (writes `aaiaas:agents:control:heartbeat` to Redis)
+
+To queue workflow execution instead of running in-process, set:
+
+- `WORKFLOW_EXECUTION_MODE=queued`
 
 ### Database Migrations
 

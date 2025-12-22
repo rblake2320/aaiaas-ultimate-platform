@@ -17,7 +17,7 @@ describe('APIKeyService', () => {
         hash: 'hashed_value',
       };
 
-      (jwt.generateApiKey as jest.Mock).mockReturnValue(mockKey);
+      (jwt.generateApiKey as any).mockReturnValue(mockKey);
 
       const result = jwt.generateApiKey();
       expect(result.key).toMatch(/^sk_/);
@@ -33,7 +33,7 @@ describe('APIKeyService', () => {
           prefix: `sk_${i}`,
           hash: `hash_${i}`,
         };
-        (jwt.generateApiKey as jest.Mock).mockReturnValue(mockKey);
+        (jwt.generateApiKey as any).mockReturnValue(mockKey);
         keys.add(jwt.generateApiKey().key);
       }
 
@@ -47,8 +47,8 @@ describe('APIKeyService', () => {
         hash: 'hashed_sk_test_key',
       };
 
-      (jwt.generateApiKey as jest.Mock).mockReturnValue(mockKey);
-      (jwt.hashToken as jest.Mock).mockReturnValue(mockKey.hash);
+      (jwt.generateApiKey as any).mockReturnValue(mockKey);
+      (jwt.hashToken as any).mockReturnValue(mockKey.hash);
 
       const result = jwt.generateApiKey();
       expect(result.hash).toBeDefined();
@@ -91,7 +91,7 @@ describe('APIKeyService', () => {
       const keyId = 'key-123';
       
       // Mock would update the database
-      const mockUpdate = jest.fn().mockResolvedValue({ revoked: true });
+      const mockUpdate = jest.fn(async () => ({ revoked: true }));
       
       await mockUpdate();
       expect(mockUpdate).toHaveBeenCalled();

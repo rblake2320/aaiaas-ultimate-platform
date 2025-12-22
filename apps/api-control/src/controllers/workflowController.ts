@@ -185,28 +185,49 @@ export class WorkflowController {
 
     const executionId = uuidv4();
 
-    // Execute workflow asynchronously
-    workflowEngine
-      .executeWorkflow(definition, {
-        executionId,
-        organizationId,
-        userId,
-        variables: {},
-      }, input.input)
-      .catch((error) => {
-        logger.error('Workflow execution error', {
-          workflowId: id,
-          executionId,
-          error: error.message,
-        });
+    const mode = (process.env.WORKFLOW_EXECUTION_MODE || 'inline').toLowerCase();
+
+    if (mode === 'queued') {
+      // Enqueue workflow run for the always-running workflow runner agent
+      await db('workflow_runs').insert({
+        id: executionId,
+        workflow_id: definition.id,
+        organization_id: organizationId,
+        user_id: userId,
+        status: 'pending',
+        input: input.input ?? {},
+        created_at: new Date(),
+        updated_at: new Date(),
       });
+    } else {
+      // Execute workflow asynchronously in-process (dev-friendly default)
+      workflowEngine
+        .executeWorkflow(
+          definition,
+          {
+            executionId,
+            organizationId,
+            userId,
+            variables: {},
+          },
+          input.input,
+          { createRunRecord: true }
+        )
+        .catch((error) => {
+          logger.error('Workflow execution error', {
+            workflowId: id,
+            executionId,
+            error: error.message,
+          });
+        });
+    }
 
     logger.info('Workflow execution started', { workflowId: id, executionId });
 
     res.status(202).json({
       executionId,
-      status: 'running',
-      message: 'Workflow execution started',
+      status: mode === 'queued' ? 'pending' : 'running',
+      message: mode === 'queued' ? 'Workflow execution queued' : 'Workflow execution started',
     });
   }
 
@@ -222,13 +243,25 @@ export class WorkflowController {
       return res.status(404).json({ error: 'Execution not found' });
     }
 
+    const safeJson = (value: any) => {
+      if (value == null) return null;
+      if (typeof value === 'string') {
+        try {
+          return JSON.parse(value);
+        } catch {
+          return value;
+        }
+      }
+      return value;
+    };
+
     res.json({
       id: execution.id,
       workflowId: execution.workflow_id,
       status: execution.status,
-      input: execution.input ? JSON.parse(execution.input) : null,
-      output: execution.output ? JSON.parse(execution.output) : null,
-      error: execution.error,
+      input: safeJson(execution.input),
+      output: safeJson(execution.output),
+      error: execution.error_message,
       startedAt: execution.started_at,
       completedAt: execution.completed_at,
     });
@@ -249,7 +282,7 @@ export class WorkflowController {
         status: e.status,
         startedAt: e.started_at,
         completedAt: e.completed_at,
-        error: e.error,
+        error: e.error_message,
       })),
     });
   }

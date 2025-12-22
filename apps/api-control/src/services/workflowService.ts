@@ -34,7 +34,8 @@ export class WorkflowEngine {
   async executeWorkflow(
     workflow: WorkflowDefinition,
     context: WorkflowContext,
-    input?: Record<string, any>
+    input?: Record<string, any>,
+    options?: { createRunRecord?: boolean }
   ): Promise<any> {
     logger.info('Starting workflow execution', {
       workflowId: workflow.id,
@@ -48,16 +49,45 @@ export class WorkflowEngine {
       ...input,
     };
 
-    // Create workflow run record
-    await db('workflow_runs').insert({
-      id: context.executionId,
-      workflow_id: workflow.id,
-      organization_id: context.organizationId,
-      user_id: context.userId,
-      status: 'running',
-      input: JSON.stringify(input),
-      started_at: new Date(),
-    });
+    const shouldCreateRun = options?.createRunRecord !== false;
+
+    // Ensure workflow run record exists + mark running
+    if (shouldCreateRun) {
+      await db('workflow_runs').insert({
+        id: context.executionId,
+        workflow_id: workflow.id,
+        organization_id: context.organizationId,
+        user_id: context.userId,
+        status: 'running',
+        input: input ?? {},
+        started_at: new Date(),
+        created_at: new Date(),
+        updated_at: new Date(),
+      });
+    } else {
+      const updatedRows = await db('workflow_runs')
+        .where({ id: context.executionId })
+        .update({
+          status: 'running',
+          started_at: new Date(),
+          updated_at: new Date(),
+        });
+
+      if (updatedRows === 0) {
+        // Fallback: create if missing (defensive, should be rare)
+        await db('workflow_runs').insert({
+          id: context.executionId,
+          workflow_id: workflow.id,
+          organization_id: context.organizationId,
+          user_id: context.userId,
+          status: 'running',
+          input: input ?? {},
+          started_at: new Date(),
+          created_at: new Date(),
+          updated_at: new Date(),
+        });
+      }
+    }
 
     try {
       // Find trigger node
@@ -74,8 +104,9 @@ export class WorkflowEngine {
         .where({ id: context.executionId })
         .update({
           status: 'completed',
-          output: JSON.stringify(result),
+          output: result ?? {},
           completed_at: new Date(),
+          updated_at: new Date(),
         });
 
       logger.info('Workflow execution completed', {
@@ -96,8 +127,9 @@ export class WorkflowEngine {
         .where({ id: context.executionId })
         .update({
           status: 'failed',
-          error: error.message,
+          error_message: error.message,
           completed_at: new Date(),
+          updated_at: new Date(),
         });
 
       throw error;
